@@ -1,268 +1,155 @@
 # Typeless Switch
 
-Typeless Switch 是一个面向 Windows 和 macOS 的 Typeless 本地账号与词典迁移工具。它可以导出当前账号的自定义词典、通过邮箱验证码切换账号，并把词典批量导入目标账号。
+Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于快速切换 Typeless 账号并迁移自定义词典。
 
-> 当前版本提供命令行脚本；轻量级 Windows GUI 是后续开发方向。请只操作你拥有或获准使用的账号，并遵守 Typeless 的服务条款。
+当前桌面版以极简操作为目标：不常驻托盘、不安装后台服务、不要求用户配置 Node.js。只有执行账号切换时才会临时打开 WebView2 登录窗口。
+
+> 本项目不是 Typeless 官方产品。请只操作你本人拥有或获准使用的账号，并遵守 Typeless 的服务条款。本工具不会绕过服务端的订阅、额度、设备或账号限制。
 
 ## 功能
 
-- 导出完整词典为 JSON、TXT 和 CSV。
+- 在 GUI 中读取当前 Typeless 账号。
+- 使用邮箱验证码切换账号。
+- 切换前自动备份本地状态；取消或失败时自动恢复。
+- 一次导出完整词典为 JSON、TXT 和 CSV。
+- 批量导入时按每批最多 200 个词条拆分，并行提交多个批次。
+- 完整导入模式使用可控并发，保留语言、分类、自动替换和替换目标等元数据。
 - 自动跳过目标账号中已经存在的词条。
-- 默认使用官方 bulk-import 接口分批并行导入。
-- 可选并发 full 模式，保留语言、分类和替换文本等元数据。
-- 通过无头浏览器完成邮箱登录，兼容中英文登录页面。
-- 切换账号前备份本地状态，并重建本地登录会话。
-- 运行依赖安装在仓库内的 scripts/.vendor，不污染全局 Node.js 环境。
+- 显示进度、成功/失败数量，并支持取消长时间操作。
 
-## 支持范围
+## 安装
 
-| 环境 | 状态 | 说明 |
-|---|---:|---|
-| Windows 10/11 | 主要支持 | 使用 PowerShell 包装脚本 |
-| macOS | 支持 | 使用 Bash 包装脚本 |
-| Linux | 暂不支持 | Typeless 桌面端和本地数据布局尚未适配 |
+从仓库的 [Releases](../../releases) 页面下载名称类似下面的安装程序：
 
-## 环境要求
+```text
+TypelessSwitch-0.1.0-win-x64-setup.exe
+```
 
-- 已安装 Typeless 桌面端。
-- Node.js 18 或更高版本，并能使用 npm。
-- 可以接收 Typeless 六位验证码的真实邮箱。
-- Windows 使用 PowerShell；macOS 使用系统 Bash。
+运行安装程序后，从开始菜单打开 Typeless Switch。安装包自带 .NET 8 运行时；Windows 10 若没有 WebView2 Runtime，需要先通过 Microsoft Edge 更新安装它。Windows 11 通常已经包含 WebView2。
 
-首次运行时，包装脚本会在 scripts/.vendor 中自动安装 electron-store 和需要的浏览器自动化依赖。
+安装默认写入当前用户目录，不需要管理员权限，也不会配置开机启动。
 
-## 使用约定
+## 使用
 
-以下所有命令都假设终端当前目录是仓库根目录，也就是能够看到 README.md 和 scripts 目录的位置。
+### 切换账号
 
-不要把文档中的命令改成作者电脑上的绝对路径。仓库文件统一通过 ./scripts 和 ./references 访问；Typeless 的系统数据目录由脚本根据当前用户和操作系统自动解析。
+1. 打开 Typeless Switch。
+2. 在“切换账号”中输入目标邮箱。
+3. 点击“切换账号”。程序会先关闭 Typeless 并备份当前本地状态。
+4. 在登录窗口中继续邮箱登录并填写六位验证码。
+5. 登录成功后，程序写入新会话并重新打开 Typeless。
 
-## Windows 快速开始
+关闭登录窗口或发生错误时，程序会恢复切换前的本地状态。备份保存在系统临时目录中，名称格式为 `%TEMP%\typeless-switch-backup-*`。
 
-完全退出 Typeless，包括系统托盘中的后台进程，然后在仓库根目录打开 PowerShell。
+### 导出词典
 
-### 1. 导出源账号词典
+1. 确认窗口顶部显示的是需要导出的账号。
+2. 点击“导出当前词典”。
+3. 选择一个文件夹。
 
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export-dictionary.ps1
-~~~
+程序会同时创建：
 
-成功后会生成：
+```text
+typeless-dictionary-export.json
+typeless-dictionary-export.txt
+typeless-dictionary-export.csv
+```
 
-- references/typeless-dictionary-export.json
-- references/typeless-dictionary-export.txt
-- references/typeless-dictionary-export.csv
+JSON 是重新导入时使用的标准文件。导出内容可能包含个人用词，请按私密数据保存。
 
-### 2. 切换到目标账号
+### 导入词典
 
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\switch-account.ps1 --email "user@example.com"
-~~~
+1. 点击“选择文件”，选择之前导出的 JSON。
+2. 选择导入模式。
+3. 点击“开始导入”。
 
-脚本发送验证码后，在终端输入收到的六位验证码。
+两种模式都不是逐条串行导入：
 
-### 3. 导入词典
+- “快速批量”每批最多 200 个词条，多批并行提交，速度最快，只迁移词条文本。
+- “完整元数据”并发提交单个词条，默认并发数为 12，保留完整字段。
 
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1
-~~~
+## 本地数据与隐私
 
-没有传入 --input 时，包装脚本会自动读取 references/typeless-dictionary-export.json。
+程序根据当前 Windows 用户动态解析路径，不包含开发者电脑的盘符、用户名或绝对目录。
 
-### 4. 验证迁移
+| 数据 | 通用位置 |
+|---|---|
+| Typeless 加密会话 | `%APPDATA%\Typeless.exe\user-data.json` |
+| Typeless 本地状态 | `%APPDATA%\Typeless.exe\app-storage.json` |
+| Typeless 设备缓存 | `%APPDATA%\Typeless\Cache\device.cache` |
+| Typeless Switch 账号摘要 | `%LOCALAPPDATA%\TypelessSwitch\accounts.json` |
+| 登录 WebView2 数据 | `%LOCALAPPDATA%\TypelessSwitch\WebView2` |
+| 切换前备份 | `%TEMP%\typeless-switch-backup-*` |
 
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export-dictionary.ps1
-~~~
+`accounts.json` 只记录邮箱、Typeless 用户 ID 和最后使用时间，不保存 access token 或 refresh token。令牌只从本地登录页读取，并按 Typeless 使用的加密格式写入其本地会话文件。
 
-核对输出的账号和词条总数。
+如果 Typeless 安装在非默认目录，可以为当前用户设置 `TYPELESS_APP_PATH`，值为实际的 `Typeless.exe` 路径。不要把该值写入仓库文档或提交记录。
 
-## macOS 快速开始
+## 轻量化约束
 
-完全退出 Typeless，然后在仓库根目录打开终端。
+- 单进程 WPF 应用，没有 Electron、常驻服务或托盘守护进程。
+- 登录浏览器只在切换账号时创建。
+- 主窗口关闭后进程退出。
+- Windows x64 自包含发布，不要求目标电脑预装 .NET。
 
-~~~bash
-bash ./scripts/export-dictionary.sh
-bash ./scripts/switch-account.sh --email "user@example.com"
-bash ./scripts/import-dictionary.sh
-bash ./scripts/export-dictionary.sh
-~~~
+开发机 Release 基线测试中，未打开登录页时工作集约 115–135 MB；具体数值会随 Windows 版本、字体缓存和安全软件变化。安装程序约 46 MB，安装后自包含文件约 146 MB（安装器自身约增加 4 MB）。
 
-四条命令依次完成导出、切换、导入和验证。默认导入文件同样是 references/typeless-dictionary-export.json。
+## 从源码构建
 
-## 导入模式
+要求：
 
-### bulk：默认模式
+- Windows 10/11 x64
+- .NET 8 SDK
+- Inno Setup 6（仅构建安装程序时需要）
 
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1 --mode bulk
-~~~
+在仓库根目录运行：
 
-~~~bash
-bash ./scripts/import-dictionary.sh --mode bulk
-~~~
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
+```
 
-- 每批最多 200 个词条。
-- 多个批次并行提交。
-- 速度最快。
-- 与 Typeless 官方 CSV 导入类似，只迁移词条文本。
+相对输出位置：
 
-### full：保留元数据
+```text
+artifacts\publish\win-x64\
+installer\output\TypelessSwitch-0.1.0-win-x64-setup.exe
+```
 
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1 --mode full --concurrency 12
-~~~
+只构建自包含应用、不构建安装程序：
 
-~~~bash
-bash ./scripts/import-dictionary.sh --mode full --concurrency 12
-~~~
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -SkipInstaller
+```
 
-- 使用并发请求导入。
-- 保留语言、分类和替换文本等字段。
-- --concurrency 控制最大并发数，默认值为 12。
+运行测试：
 
-### 预览但不写入
-
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1 --dry-run
-~~~
-
-~~~bash
-bash ./scripts/import-dictionary.sh --dry-run
-~~~
-
-## 使用自定义相对路径
-
-如果导入文件不在 references 中，可以从仓库根目录传入相对路径：
-
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1 --input ".\backups\dictionary.json"
-~~~
-
-~~~bash
-bash ./scripts/import-dictionary.sh --input "./backups/dictionary.json"
-~~~
-
-路径可以包含空格，但必须加引号。包装脚本会根据自身位置定位依赖，不依赖仓库被克隆到哪个磁盘、目录或用户主目录。
-
-## 账号切换行为
-
-切换脚本会：
-
-1. 把当前 Typeless 本地状态备份到操作系统临时目录。
-2. 清除本地登录、额度请求和 Electron 会话缓存。
-3. 更新本地设备标识。
-4. 启动无头浏览器并打开 Typeless 登录页面。
-5. 提交目标邮箱和验证码。
-6. 把新会话加密写回 Typeless 本地数据目录。
-7. 将账号摘要记录到仓库根目录的 accounts.json。
-
-accounts.json、导出的词典和 scripts/.vendor 已被 .gitignore 排除，不会随正常提交上传。
-
-## 路径兼容性
-
-仓库内部只使用相对路径。Typeless 自身的文件必须位于操作系统用户目录中，因此脚本使用环境变量解析：
-
-- Windows：从 %APPDATA%、%LOCALAPPDATA% 和 %ProgramFiles% 推导。
-- macOS：从 $HOME 和标准 Applications 目录推导。
-- 自定义 Typeless 安装位置：设置 TYPELESS_APP_PATH。
-- 自定义浏览器位置：设置 PUPPETEER_EXECUTABLE_PATH 或 CHROME_PATH。
-
-这些变量只需要指向本机实际位置，不应写入仓库文档或提交到 Git。
-
-## 邮箱兼容性
-
-通常可用：
-
-- Gmail
-- Outlook / Hotmail
-- QQ 邮箱
-- 163 邮箱
-- 能正常接收验证码的自定义域名邮箱
-
-已知不稳定或不可用：
-
-- 包含加号别名的地址，例如 user+tag@example.com
-- 临时邮箱
-- 会破坏邮件签名或延迟转发的匿名转发服务
-
-Google 或 Apple 登录的源账号可以先在 Typeless 桌面端手动登录，再运行导出。自动切换流程目前只支持邮箱验证码登录。
-
-## 常见问题
-
-### 无法读取登录态或 access token
-
-打开 Typeless，重新登录源账号，等待同步完成，然后完全退出 Typeless 再导出。若本地 token 已过期，也需要重新登录。
-
-### 登录页面按钮找不到
-
-脚本兼容常见的中英文按钮文本。若 Typeless 更新了页面结构，请保留完整错误信息并提交 issue。
-
-### account exceeded limit 或 websocket connection limit
-
-先确保 Typeless 已完全退出，再重新运行切换脚本。问题仍存在时可能属于服务端账号或设备槽状态，本工具不能绕过服务端限制。
-
-### 导入失败
-
-先使用 --dry-run 检查文件格式，再确认目标账号登录态有效。bulk 模式失败时可保留错误输出，并尝试降低批次操作频率或使用 full 模式定位具体词条。
-
-### Typeless 安装在非默认目录
-
-为当前终端设置 TYPELESS_APP_PATH，再重新运行包装脚本。不要把个人绝对路径提交到仓库。
+```powershell
+dotnet test .\TypelessSwitch.sln --configuration Release
+```
 
 ## 项目结构
 
-~~~text
+```text
 .
-├── README.md
-├── SKILL.md
-├── LICENSE
-├── scripts/
-│   ├── export-dictionary.mjs
-│   ├── export-dictionary.ps1
-│   ├── export-dictionary.sh
-│   ├── import-dictionary.mjs
-│   ├── import-dictionary.ps1
-│   ├── import-dictionary.sh
-│   ├── read-user-session.mjs
-│   ├── switch-account.mjs
-│   ├── switch-account.ps1
-│   ├── switch-account.sh
-│   ├── reset-device-windows.ps1
-│   └── reset-device-macos.sh
-└── references/
-    └── extract-dictionary.md
-~~~
+├── src\TypelessSwitch.App\       WPF GUI 与 WebView2 登录
+├── src\TypelessSwitch.Core\      会话、本地状态与词典服务
+├── tests\TypelessSwitch.Tests\   兼容性与并发回归测试
+├── installer\                    Inno Setup 配置
+├── scripts\build-release.ps1     Release 构建入口
+├── scripts\*.mjs                 旧命令行兼容工具
+└── references\extract-dictionary.md
+```
 
-## 安全说明
+旧 Node.js/PowerShell/Bash 脚本仍保留，便于排障和兼容原工作流；Windows 普通用户应优先使用 GUI。
 
-- 不要在 issue、日志或聊天中发布 access token、refresh token 或 user-data.json。
-- 导出的词典可能包含个人用词，应按私密数据处理。
-- 切换账号会修改 Typeless 本地登录状态；操作前必须先导出需要保留的词典。
-- 本工具只处理本地会话和官方接口，不保证绕过任何服务端账号、额度或设备限制。
+## 已知限制
 
-## English quick guide
+- 当前自动切换只支持邮箱验证码登录。Google 或 Apple 登录的账号可以先在 Typeless 桌面端登录，再使用导出功能。
+- Typeless 登录页面或 API 若发生变化，页面自动填写或词典操作可能需要随之更新。
+- 未持有有效 Typeless 账号时，可以验证启动、安装、加密兼容和本地回滚，但无法完成真实服务端登录的端到端测试。
 
-Run every command from the repository root. Repository files are referenced only through relative paths, so the checkout can live under any user profile or drive.
+技术细节见 [references/extract-dictionary.md](./references/extract-dictionary.md)。
 
-Windows:
+## 许可证
 
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export-dictionary.ps1
-powershell -ExecutionPolicy Bypass -File .\scripts\switch-account.ps1 --email "user@example.com"
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1
-~~~
-
-macOS:
-
-~~~bash
-bash ./scripts/export-dictionary.sh
-bash ./scripts/switch-account.sh --email "user@example.com"
-bash ./scripts/import-dictionary.sh
-~~~
-
-The default import uses parallel bulk batches. Use --mode full --concurrency 12 to preserve dictionary metadata, or --dry-run to preview without writing. System-specific Typeless locations are resolved from environment variables; set TYPELESS_APP_PATH only when the desktop app is installed in a non-standard location.
-
-## License
-
-Apache License 2.0. See LICENSE.
+本项目使用 [Apache License 2.0](./LICENSE)。

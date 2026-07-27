@@ -1,6 +1,19 @@
 # Runtime dependencies (installed automatically)
 scripts/.vendor/
 
+# .NET / Visual Studio build output
+**/bin/
+**/obj/
+artifacts/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# App-owned local state and release tooling output
+installer/output/
+
 # Account records (may contain sensitive info)
 accounts.json
 

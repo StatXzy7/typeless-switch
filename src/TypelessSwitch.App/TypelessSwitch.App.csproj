@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\TypelessSwitch.Core\TypelessSwitch.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3537.50" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <AssemblyName>TypelessSwitch</AssemblyName>
+    <RootNamespace>TypelessSwitch.App</RootNamespace>
+    <Version>0.1.0</Version>
+    <Authors>StatXzy7</Authors>
+    <Product>Typeless Switch</Product>
+    <Description>A lightweight Windows GUI for switching Typeless accounts and migrating dictionaries.</Description>
+    <AllowedReferenceRelatedFileExtensions>.pri;.dll.config;.exe.config</AllowedReferenceRelatedFileExtensions>
+    <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

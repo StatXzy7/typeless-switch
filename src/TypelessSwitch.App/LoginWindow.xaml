@@ -1,0 +1,24 @@
+<Window x:Class="TypelessSwitch.App.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="登录 Typeless" Width="920" Height="720" MinWidth="760" MinHeight="560"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource PageBrush}"
+        FontFamily="Segoe UI" Closing="Window_Closing" Loaded="Window_Loaded">
+    <Grid Margin="18">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <StackPanel Margin="2,0,0,14">
+            <TextBlock Text="完成 Typeless 登录" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock x:Name="InstructionText" Text="正在打开安全登录页…" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
+        </StackPanel>
+        <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="9">
+            <wv2:WebView2 x:Name="Browser" Margin="1" />
+        </Border>
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <TextBlock Text="登录成功后窗口会自动关闭。Typeless Switch 不会上传或显示令牌。"
+                       Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Content="取消并恢复" Style="{StaticResource QuietButton}" Click="CancelButton_Click" />
+        </Grid>
+    </Grid>
+</Window>

@@ -1,261 +1,127 @@
-# Typeless Switch technical reference
+# Typeless Switch 技术参考
 
-## Scope
+本文说明 Windows GUI 的数据边界、会话格式、词典接口、并发策略和回滚流程。所有仓库文件都使用相对路径；Windows 用户目录使用环境变量表达。
 
-This document explains how the bundled scripts locate Typeless data, read the active session, export and import dictionary entries, and switch the local account on Windows and macOS.
+## 组件
 
-All repository paths below are relative to the repository root. Operating-system data paths use environment variables instead of a developer-specific username, drive, or home directory.
+```text
+src\TypelessSwitch.App\
+  MainWindow.xaml(.cs)       主界面、进度与取消
+  LoginWindow.xaml(.cs)      WebView2 邮箱登录
 
-## Repository path model
+src\TypelessSwitch.Core\
+  TypelessPaths.cs           用户路径和程序发现
+  SessionStoreService.cs     Typeless 会话加解密
+  LocalStateService.cs       停止、备份、清理、恢复和重启
+  DictionaryService.cs       列表、导出和并发导入
+  AccountRegistryService.cs  非敏感账号摘要
+```
 
-Generated files:
+GUI 只有一个主进程。没有后台服务、托盘进程、Node.js 或 Puppeteer 运行时。WebView2 只在账号切换期间初始化。
 
-- references/typeless-dictionary-export.json
-- references/typeless-dictionary-export.txt
-- references/typeless-dictionary-export.csv
-- accounts.json
-- scripts/.vendor/
+## 路径模型
 
-Only the first three are dictionary exports. accounts.json stores local account summaries, and scripts/.vendor contains runtime dependencies. All of these generated or private paths are excluded by .gitignore.
+| 用途 | Windows 通用路径 |
+|---|---|
+| Typeless 用户目录 | `%APPDATA%\Typeless.exe` |
+| 加密会话 | `%APPDATA%\Typeless.exe\user-data.json` |
+| 应用状态 | `%APPDATA%\Typeless.exe\app-storage.json` |
+| 设备缓存 | `%APPDATA%\Typeless\Cache\device.cache` |
+| Typeless Switch 数据 | `%LOCALAPPDATA%\TypelessSwitch` |
+| 切换备份 | `%TEMP%\typeless-switch-backup-*` |
 
-The wrappers calculate their own directory before invoking Node.js, so dependency and output locations do not depend on where the repository was cloned.
+Typeless 程序依次从 `TYPELESS_APP_PATH`、`%LOCALAPPDATA%\Programs\Typeless` 和 `%ProgramFiles%\Typeless` 查找。
 
-## Operating-system data model
+## 会话兼容
 
-Typeless data is outside the repository and belongs to the current operating-system user.
+`SessionStoreService` 兼容 Typeless 当前使用的 `conf`/`electron-store` 文件布局：
 
-### Windows
+1. 对 `win32-x64` 计算 SHA-256 十六进制种子；Windows 当前版本使用应用名 `Typeless.exe`，旧版本候选包括 `Typeless` 和 `typeless`。
+2. 使用 `typeless-user-service` 作为盐，以 PBKDF2-SHA256 迭代 10,000 次得到 32 字节应用密钥。
+3. 文件布局为 16 字节 IV、一个冒号字节、AES-256-CBC 密文。
+4. AES 密钥使用应用密钥和 Node `iv.toString()` 兼容盐，以 PBKDF2-SHA512 迭代 10,000 次得到。
+5. 外层 JSON 的 `userData` 是包含邮箱、token、登录时间和用户 ID 的 JSON 字符串。
 
-The scripts derive locations from:
+写入采用同目录临时文件加原子替换，避免中途退出留下半个会话文件。测试中的固定密文由 Node.js 参考实现生成，并包含非法 UTF-8 IV 字节，用于防止不同 UTF-8 替换策略造成不兼容。
 
-- %APPDATA% for the encrypted Typeless user store.
-- %LOCALAPPDATA% and %ProgramFiles% for common application locations.
-- The operating-system temporary directory for backups and the optional verification-code signal file.
+## 账号切换事务
 
-Observed user-store layout:
+```text
+停止 Typeless
+  → 备份本地状态
+  → 清理旧会话、浏览器缓存和设备缓存
+  → WebView2 邮箱验证码登录
+  → 读取登录页 localStorage token
+  → 加密写入新会话
+  → 启动 Typeless
+```
 
-~~~text
-%APPDATA%\Typeless.exe
-~~~
+只要登录被取消或写入失败，就从备份恢复原目录和设备缓存，然后重新启动 Typeless。备份放在操作系统临时目录，不写入仓库。
 
-### macOS
+WebView2 读取的 localStorage 键为：
 
-The scripts derive locations from $HOME and the operating-system temporary directory.
+```text
+MAXAI_CLIENT__FEATURES__AUTH__TOKEN_INFO
+```
 
-Observed user-store layout:
+程序不会把 token 写入日志或 `accounts.json`。
 
-~~~text
-$HOME/Library/Application Support/Typeless
-~~~
+## 词典导出
 
-Common application locations are the system Applications directory and the current user's Applications directory. TYPELESS_APP_PATH can override application discovery on either platform.
+列表请求：
 
-These system paths cannot be repository-relative, but they remain user-independent because they are resolved from the active environment.
-
-## Export pipeline
-
-### 1. Start from the source account
-
-The source account must be active in the Typeless desktop app for the same operating-system user who runs the scripts. Allow synchronization to finish, then quit Typeless completely before reading the local store.
-
-### 2. Start the wrapper
-
-Windows:
-
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export-dictionary.ps1
-~~~
-
-macOS:
-
-~~~bash
-bash ./scripts/export-dictionary.sh
-~~~
-
-The wrapper:
-
-1. Creates scripts/.vendor when needed.
-2. Installs electron-store locally on first use.
-3. Supplies the runtime module path to the Node.js exporter.
-4. Writes all export formats under references.
-
-### 3. Read the local encrypted session
-
-scripts/read-user-session.mjs reads user-data.json from the current platform's Typeless data directory.
-
-Typeless and electron-store releases have used more than one encryption layout. The reader tries compatible combinations of:
-
-- Platform and architecture identifiers.
-- Typeless application-name variants.
-- PBKDF2-derived keys.
-- Supported conf/electron-store ciphertext layouts.
-
-A valid result must contain an access token. Tokens are used in memory for authenticated API requests and must never be printed or added to export artifacts.
-
-### 4. Request dictionary data
-
-The exporter calls:
-
-~~~text
+```text
 GET https://api.typeless.com/user/dictionary/list?size=10000
-~~~
+```
 
-The bearer token comes from the local encrypted session. A successful response provides the word collection used for all output formats.
+一次响应同时生成三个文件：
 
-### 5. Write export artifacts
+- JSON：完整结构化备份，也是标准导入源。
+- TXT：每行一个词条。
+- CSV：词条、语言、分类、自动和替换标志。
 
-- JSON is the canonical structured backup and import source.
-- TXT contains one term per line for quick inspection.
-- CSV is intended for spreadsheet review.
+## 并发导入
 
-The files remain inside references unless the user explicitly selects another output directory when invoking the Node.js implementation directly.
+导入前先调用列表接口，并跳过目标账号中已有的词条。
 
-## Import pipeline
+### Bulk 模式
 
-Start the platform wrapper without --input to use the canonical relative export automatically.
+```text
+POST https://api.typeless.com/user/dictionary/bulk-import
+```
 
-Windows:
+- 每批最多 200 个 term。
+- 多批通过有界并行循环同时提交。
+- GUI 默认最大并发为 12，服务层上限为 16。
+- 只保留词条文本。
 
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1
-~~~
+### Full 模式
 
-macOS:
+```text
+POST https://api.typeless.com/user/dictionary/add
+```
 
-~~~bash
-bash ./scripts/import-dictionary.sh
-~~~
+- 每个请求包含 term、lang、category、auto、replace 和 replace_targets。
+- 使用 1 到 32 的可配置并发数，默认 12。
+- 按 term 和 lang 组合去重。
 
-The importer first lists existing target-account terms and removes duplicates from the pending set.
+两个模式都支持 `CancellationToken`，并通过 `IProgress` 报告完成、成功和失败数量。
 
-### bulk mode
+## 验证
 
-bulk is the default.
+`tests\TypelessSwitch.Tests` 当前覆盖：
 
-~~~text
-POST /user/dictionary/bulk-import
-~~~
+- Node `conf` 固定密文兼容。
+- 会话写入/读取往返。
+- 450 个词条拆成 200、200、50 三批并确认请求发生并发。
+- 本地状态备份、清理和失败恢复。
 
-- Terms are grouped into chunks of up to 200.
-- Chunks are submitted in parallel.
-- This mode is fastest but migrates term text only.
+Release 构建入口：
 
-### full mode
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
+```
 
-~~~text
-POST /user/dictionary/add
-~~~
+构建脚本先运行测试，再创建 `artifacts\publish\win-x64` 和 `installer\output`。这些生成目录由 `.gitignore` 排除。
 
-- Requests run through a bounded concurrency pool.
-- The default concurrency is 12.
-- Language, category, and replacement metadata are preserved.
-
-### dry-run mode
-
---dry-run performs file parsing, session validation, existing-term lookup, and duplicate calculation without adding entries.
-
-## Account-switch pipeline
-
-Run the wrapper with a target email:
-
-Windows:
-
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\switch-account.ps1 --email "user@example.com"
-~~~
-
-macOS:
-
-~~~bash
-bash ./scripts/switch-account.sh --email "user@example.com"
-~~~
-
-The switcher:
-
-1. Creates a timestamped backup under the operating-system temporary directory.
-2. Removes the encrypted local login file.
-3. Clears selected login, quota, request, Electron, and Chromium state.
-4. Refreshes the local device identifier.
-5. Opens a headless browser.
-6. Selects the email-login flow in English or Chinese.
-7. Submits the target email.
-8. Accepts a six-digit code from --code, stdin, or the temporary signal file.
-9. Captures the authenticated browser session.
-10. Writes a new encrypted local session and updates accounts.json.
-
-The optional signal file is named typeless-code.txt and belongs in the operating-system temporary directory, never in the repository.
-
-## Application and browser discovery
-
-Application discovery checks platform-standard locations derived from environment variables. For a non-standard installation, set TYPELESS_APP_PATH only in the current shell or user environment.
-
-Browser automation checks:
-
-1. PUPPETEER_EXECUTABLE_PATH
-2. CHROME_PATH
-3. Common Chrome or Edge locations on Windows
-4. Common Chrome or Chromium locations on macOS and compatible Unix environments
-5. Puppeteer's bundled browser when available
-
-Do not add a personal executable path to repository documentation.
-
-## Reset helpers
-
-The reset helpers are destructive to the local Typeless session and must only run with user authorization.
-
-Windows:
-
-~~~powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\reset-device-windows.ps1
-~~~
-
-macOS:
-
-~~~bash
-bash ./scripts/reset-device-macos.sh
-~~~
-
-The macOS helper creates a backup before cleanup. The Windows switcher also creates a temporary backup; the standalone Windows reset helper should be used only when the user understands its local-state effects.
-
-Local cleanup does not modify or bypass server-side account, subscription, quota, websocket, or device-slot rules.
-
-## Validation checklist
-
-After export:
-
-- Confirm the account email is expected.
-- Confirm the reported total is plausible.
-- Spot-check known terms without publishing private vocabulary.
-- Confirm the JSON export exists.
-
-After import:
-
-- Review imported, skipped, and failed counts.
-- Export the target dictionary again.
-- Compare counts and selected terms with the source export.
-
-## Troubleshooting
-
-### Missing user-data.json
-
-Log in through the Typeless desktop app, wait for synchronization, quit the app, and retry.
-
-### Session decryption failed
-
-A Typeless or electron-store update may have changed the storage layout. Preserve the error message, but never share the encrypted store publicly without reviewing its sensitivity.
-
-### HTTP 401
-
-The local token is expired. Reauthenticate in the desktop app and export again.
-
-### Dictionary endpoint failure
-
-Check network connectivity, token freshness, and the response status. Typeless may have changed its API contract.
-
-### Login selector failure
-
-Typeless may have changed its localized page markup. Capture the visible button text and update selectors without hardcoding a single language.
-
-### Import errors
-
-Run --dry-run first. Use full mode when per-term error detail is needed, and reduce --concurrency if the service begins rate limiting.
+真实邮箱验证码登录和远端词典写入需要账号所有者交互，不能由离线测试替代。

@@ -1,156 +1,51 @@
 Typeless Switch Windows 使用说明
+================================
 
-适用范围
-========
+适用系统：Windows 10/11 x64
 
-本说明适用于 Windows 10/11。所有命令都假设 PowerShell 当前目录是仓库根目录，也就是能看到 README.md、scripts 和 references 的目录。
+一、安装
+--------
 
-不要填写作者电脑的盘符、用户名或安装目录。仓库内文件统一使用 .\scripts 和 .\references 相对路径；Typeless 的用户数据由脚本通过 Windows 环境变量自动定位。
+从本仓库 Releases 页面下载 TypelessSwitch-*-win-x64-setup.exe 并运行。
+安装不需要管理员权限，也不会设置开机启动。
 
-准备工作
-========
+二、切换账号
+------------
 
-1. 安装 Typeless 桌面端。
-2. 安装 Node.js 18 或更高版本，并确认 node 和 npm 可以在 PowerShell 中运行。
-3. 准备一个能够接收六位验证码的真实邮箱。
-4. 在开始迁移前，确认 Typeless 已登录需要导出词典的源账号。
-5. 等待词典同步，然后完全退出 Typeless，包括系统托盘中的后台进程。
+1. 打开 Typeless Switch。
+2. 输入目标 Typeless 邮箱。
+3. 点击“切换账号”。
+4. 在弹出的 Typeless 登录页继续邮箱登录。
+5. 输入邮件中的六位验证码。
+6. 登录成功后窗口会自动关闭，Typeless 会使用新账号重新启动。
 
-首次运行包装脚本时，依赖会自动安装到 .\scripts\.vendor。该目录仅属于当前仓库，不需要全局安装 electron-store 或 Puppeteer。
+程序在修改前会自动备份本地状态。取消登录或切换失败时会自动恢复原账号。
 
-重要顺序
-========
+三、导出词典
+------------
 
-1. 导出源账号词典。
-2. 确认 .\references\typeless-dictionary-export.json 已生成。
-3. 切换到目标账号。
-4. 导入词典。
-5. 再次导出并核对结果。
+1. 确认窗口顶部显示正确的源账号。
+2. 点击“导出当前词典”。
+3. 选择保存文件夹。
 
-切换账号会修改 Typeless 本地登录状态。源词典未成功导出前，不要执行切换。
+导出会一次生成 JSON、TXT、CSV 三个文件。JSON 是后续导入的标准文件。
 
-完整迁移流程
-============
+四、导入词典
+------------
 
-步骤 1：导出源账号词典
+1. 点击“选择文件”，选择 typeless-dictionary-export.json。
+2. 选择“快速批量”或“完整元数据”。
+3. 点击“开始导入”。
 
-powershell -ExecutionPolicy Bypass -File .\scripts\export-dictionary.ps1
+快速批量模式会把词条按每批最多 200 个拆分，然后并行提交多个批次。
+完整元数据模式也会并发执行，并保留语言、分类和替换规则。
 
-成功后应生成：
+五、通用路径
+------------
 
-.\references\typeless-dictionary-export.json
-.\references\typeless-dictionary-export.txt
-.\references\typeless-dictionary-export.csv
+Typeless 数据通过 %APPDATA% 自动定位。
+Typeless Switch 自身数据保存在 %LOCALAPPDATA%\TypelessSwitch。
+临时备份保存在 %TEMP%\typeless-switch-backup-*。
 
-JSON 是后续导入使用的标准文件。导出文件已被 .gitignore 排除，不会随正常提交上传。
-
-步骤 2：切换到目标账号
-
-powershell -ExecutionPolicy Bypass -File .\scripts\switch-account.ps1 --email "user@example.com"
-
-将 user@example.com 替换为你自己的目标邮箱。脚本发送验证码后，在终端输入收到的六位数字。
-
-步骤 3：批量导入词典
-
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1
-
-未提供 --input 时，脚本会自动读取 .\references\typeless-dictionary-export.json。
-
-默认使用 bulk 模式：
-
-- 每批最多 200 个词条。
-- 多个批次并行提交。
-- 自动跳过已经存在的词条。
-- 速度最快，但只迁移词条文本。
-
-步骤 4：验证
-
-powershell -ExecutionPolicy Bypass -File .\scripts\export-dictionary.ps1
-
-核对目标账号邮箱、总词条数，以及需要确认的代表性词条。
-
-保留完整元数据
-==============
-
-如果需要保留语言、分类和替换文本，使用 full 模式：
-
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1 --mode full --concurrency 12
-
-full 模式仍然并发执行。--concurrency 的默认值是 12；网络不稳定或出现限流时可适当降低。
-
-只预览，不写入
-==============
-
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1 --dry-run
-
-该模式会读取导出、检查当前账号并计算重复词条，但不会添加新词。
-
-导入其他文件
-============
-
-从仓库根目录传入带引号的相对路径：
-
-powershell -ExecutionPolicy Bypass -File .\scripts\import-dictionary.ps1 --input ".\backups\dictionary.json"
-
-路径包含空格时必须保留引号。不要把某台电脑上的绝对路径写入公共文档。
-
-只切换账号
-==========
-
-确认 Typeless 已完全退出，然后运行：
-
-powershell -ExecutionPolicy Bypass -File .\scripts\switch-account.ps1 --email "user@example.com"
-
-切换脚本会先把本地状态备份到 Windows 临时目录，再清除旧会话并完成邮箱验证码登录。
-
-自定义安装位置
-==============
-
-脚本默认使用 %APPDATA%、%LOCALAPPDATA% 和 %ProgramFiles% 推导 Typeless 的数据目录与安装位置。
-
-如果 Typeless 安装在其他位置，可在当前 PowerShell 会话设置 TYPELESS_APP_PATH。浏览器无法自动发现时，可设置 PUPPETEER_EXECUTABLE_PATH 或 CHROME_PATH。
-
-这些变量的值属于本机配置，不应提交到 Git。
-
-常见问题
-========
-
-1. 找不到 typeless-dictionary-export.json
-
-说明导出没有成功。不要继续换号，先解决登录态、网络或 token 问题。
-
-2. 未读取到登录态或解密失败
-
-打开 Typeless，重新登录源账号，等待同步，完全退出后再次导出。
-
-3. HTTP 401 或 Access token has expired
-
-本地 token 已过期。请在 Typeless 中重新登录，再完全退出并重试。
-
-4. Google 或 Apple 登录账号
-
-先在 Typeless 桌面端手动登录源账号，再运行导出。自动切换仅支持邮箱验证码登录。
-
-5. 找不到登录页按钮
-
-Typeless 可能修改了页面结构或文案。保留完整错误信息；当前脚本已兼容常见中英文登录按钮。
-
-6. account exceeded limit 或 websocket connection limit
-
-确认 Typeless 已完全退出后重试一次。仍然失败通常属于服务端账号或设备状态，本工具不能绕过服务端限制。
-
-7. 导入太慢
-
-确认使用默认 bulk 模式。需要保留元数据时使用 full 模式，并根据网络情况调整 --concurrency。
-
-8. 浏览器无法启动
-
-确认首次依赖安装已完成。必要时为当前终端设置 PUPPETEER_EXECUTABLE_PATH 或 CHROME_PATH。
-
-安全提醒
-========
-
-- 不要公开 access token、refresh token、user-data.json 或导出的个人词典。
-- accounts.json、导出词典和 scripts\.vendor 已被 Git 忽略。
-- 切换账号会改变本机 Typeless 会话，但不会删除源账号在服务器上的词典。
-- 本工具不会绕过 Typeless 的服务端额度、订阅、账号或设备限制。
+不要在公共问题、截图或聊天中公开 token、user-data.json 或个人词典。
+更完整的说明请查看仓库根目录中的 README.md。
