@@ -1,0 +1,10 @@
+# Runtime dependencies (installed automatically)
+scripts/.vendor/
+
+# Account records (may contain sensitive info)
+accounts.json
+
+# Exported dictionary data (user-specific)
+references/typeless-dictionary-export.json
+references/typeless-dictionary-export.txt
+references/typeless-dictionary-export.csv
