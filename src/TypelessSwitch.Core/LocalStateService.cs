@@ -16,7 +16,7 @@ public sealed class LocalStateService
 
     private readonly TypelessPaths _paths;
     private readonly bool _resetWindowsCredential;
-    public LocalStateService(TypelessPaths paths, bool resetWindowsCredential = true)
+    public LocalStateService(TypelessPaths paths, bool resetWindowsCredential = false)
     {
         _paths = paths;
         _resetWindowsCredential = resetWindowsCredential;
