@@ -22,9 +22,11 @@ public sealed class LocalStateService
         _resetWindowsCredential = resetWindowsCredential;
     }
 
-    public async Task StopTypelessAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> StopTypelessAsync(CancellationToken cancellationToken = default)
     {
-        foreach (var process in Process.GetProcessesByName("Typeless"))
+        var processes = Process.GetProcessesByName("Typeless");
+        var wasRunning = processes.Length > 0;
+        foreach (var process in processes)
         {
             using (process)
             {
@@ -39,6 +41,8 @@ public sealed class LocalStateService
                 }
             }
         }
+
+        return wasRunning;
     }
 
     public Task<string> BackupAsync(CancellationToken cancellationToken = default)

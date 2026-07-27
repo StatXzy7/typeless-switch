@@ -128,9 +128,10 @@ public partial class MainWindow : Window
         {
             string? backup = null;
             var switched = false;
+            var typelessWasRunning = false;
             try
             {
-                await _localState.StopTypelessAsync(token);
+                typelessWasRunning = await _localState.StopTypelessAsync(token);
                 backup = await _localState.BackupAsync(token);
                 await _localState.ClearForLoginAsync(token);
                 SetStatus("请在登录窗口中完成邮箱验证码验证", 30);
@@ -161,7 +162,8 @@ public partial class MainWindow : Window
                     SetStatus("正在恢复原账号…", 80);
                     if (backup is not null)
                         await _localState.RestoreAsync(backup, CancellationToken.None);
-                    _localState.StartTypeless();
+                    if (typelessWasRunning)
+                        _localState.StartTypeless();
                     await RefreshSessionAsync();
                 }
             }
