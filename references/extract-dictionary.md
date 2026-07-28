@@ -96,7 +96,7 @@ GET https://api.github.com/repos/StatXzy7/typeless-switch/releases/latest
 ```
 
 只接受 GitHub 官方 HTTPS 地址和名称匹配 `TypelessSwitch-*-win-x64-setup.exe` 的 Windows x64 安装包。
-下载先写入 `.download` 临时文件，完成后使用 GitHub Release asset 的 SHA-256 digest 校验；校验成功才替换为安装包。
+优先读取 GitHub API 的 Release asset digest；如果 API 暂时限流，则回退到公开 Release 页面，并读取同名 `.sha256` 校验文件。下载先写入 `.download` 临时文件，完成后校验成功才替换为安装包。
 程序不会静默安装或替换当前版本，下载和安装都需要用户确认。
 
 ## 并发导入

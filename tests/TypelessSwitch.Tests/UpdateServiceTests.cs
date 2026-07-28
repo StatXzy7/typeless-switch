@@ -53,6 +53,23 @@ public sealed class UpdateServiceTests
     }
 
     [Fact]
+    public async Task CheckLatest_FallsBackToReleasePageWhenApiIsUnavailable()
+    {
+        var payload = Encoding.UTF8.GetBytes("fallback installer");
+        var digest = Convert.ToHexString(SHA256.HashData(payload));
+        var handler = new FallbackUpdateHandler(
+            "<a href=\"/StatXzy7/typeless-switch/releases/tag/v0.3.0\">v0.3.0</a>",
+            $"{digest}  TypelessSwitch-0.3.0-win-x64-setup.exe");
+
+        var update = await new UpdateService(new HttpClient(handler)).CheckLatestAsync(new Version(0, 1, 2));
+
+        Assert.NotNull(update);
+        Assert.Equal(new Version(0, 3, 0), update.Version);
+        Assert.Equal(digest, update.Sha256);
+        Assert.Equal("TypelessSwitch-0.3.0-win-x64-setup.exe", update.AssetName);
+    }
+
+    [Fact]
     public async Task DownloadInstaller_VerifiesSha256BeforeReplacingFile()
     {
         var payload = Encoding.UTF8.GetBytes("verified installer content");
@@ -98,5 +115,25 @@ public sealed class UpdateServiceTests
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+    }
+
+    private sealed class FallbackUpdateHandler(string releasePage, string digest) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (string.Equals(request.RequestUri?.Host, "api.github.com", StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+
+            if (request.RequestUri?.AbsolutePath.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase) == true)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(digest, Encoding.ASCII, "text/plain")
+                });
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(releasePage, Encoding.UTF8, "text/html")
+            });
+        }
     }
 }

@@ -49,6 +49,13 @@ try {
         }
         & $isccPath '.\installer\TypelessSwitch.iss'
         if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
+
+        $installerPath = Join-Path $repoRootFull 'installer\output\TypelessSwitch-0.1.3-win-x64-setup.exe'
+        if (Test-Path -LiteralPath $installerPath) {
+            $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
+            "$installerHash  $(Split-Path -Leaf $installerPath)" |
+                Set-Content -LiteralPath "$installerPath.sha256" -Encoding ascii -NoNewline
+        }
     }
 }
 finally {

@@ -25,7 +25,7 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 从仓库的 [Releases](../../releases) 页面下载名称类似下面的安装程序：
 
 ```text
-TypelessSwitch-0.1.2-win-x64-setup.exe
+TypelessSwitch-0.1.3-win-x64-setup.exe
 ```
 
 运行安装程序后，从开始菜单打开 Typeless Switch。安装包自带 .NET 8 运行时；Windows 10 若没有 WebView2 Runtime，需要先通过 Microsoft Edge 更新安装它。Windows 11 通常已经包含 WebView2。
@@ -34,7 +34,7 @@ TypelessSwitch-0.1.2-win-x64-setup.exe
 
 当前安装包尚未使用商业代码签名证书，Windows SmartScreen 可能显示“未知发布者”。请只从本仓库 Releases 下载，并核对 Release 页面公布的 SHA-256；如果不信任来源，请不要继续运行。
 
-程序启动后会在后台读取本仓库的 GitHub Releases 信息。发现新版本时会显示版本号，只有确认后才会下载；下载完成后会校验 GitHub 提供的 SHA-256，再询问是否打开安装程序。网络不可用时不会影响账号切换和词典功能。
+程序启动后会在后台读取本仓库的 GitHub Releases 信息。发现新版本时会显示版本号，只有确认后才会下载；下载完成后会校验 GitHub 提供的 SHA-256，再询问是否打开安装程序。GitHub API 暂时限流时会自动回退到公开 Release 页面和 `.sha256` 校验文件。网络不可用时不会影响账号切换和词典功能。
 
 ## 使用
 
@@ -127,7 +127,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 
 ```text
 artifacts\publish\win-x64\
-installer\output\TypelessSwitch-0.1.2-win-x64-setup.exe
+installer\output\TypelessSwitch-0.1.3-win-x64-setup.exe
 ```
 
 只构建自包含应用、不构建安装程序：

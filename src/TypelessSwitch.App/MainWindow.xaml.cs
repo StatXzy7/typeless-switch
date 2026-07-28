@@ -357,6 +357,10 @@ public partial class MainWindow : Window
 
     private static string UpdateErrorMessage(Exception exception) => exception switch
     {
+        HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden } =>
+            "GitHub 更新服务暂时限流，请稍后重试。",
+        HttpRequestException { StatusCode: var status } when status is not null =>
+            $"GitHub 更新服务返回 HTTP {(int)status.Value}，请稍后重试。",
         HttpRequestException => "无法连接 GitHub 更新服务，请检查网络后重试。",
         InvalidDataException => exception.Message,
         UnauthorizedAccessException => "没有权限保存更新安装包，请检查本地磁盘权限。",
