@@ -14,6 +14,7 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 - 一次导出完整词典为 JSON、TXT 和 CSV。
 - 可一键导出到当前用户的默认“文档”目录，也可自行选择文件夹。
 - 导出完成后自动选中生成的 JSON，下次启动也会自动发现默认文件。
+- 启动时自动检查 GitHub 最新版本，也可手动点击“检查更新”；下载前会先征得确认并校验 SHA-256。
 - 批量导入时按每批最多 200 个词条拆分，并行提交多个批次。
 - 完整导入模式使用可控并发，保留语言、分类、自动替换和替换目标等元数据。
 - 自动跳过目标账号中已经存在的词条。
@@ -24,7 +25,7 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 从仓库的 [Releases](../../releases) 页面下载名称类似下面的安装程序：
 
 ```text
-TypelessSwitch-0.1.1-win-x64-setup.exe
+TypelessSwitch-0.1.2-win-x64-setup.exe
 ```
 
 运行安装程序后，从开始菜单打开 Typeless Switch。安装包自带 .NET 8 运行时；Windows 10 若没有 WebView2 Runtime，需要先通过 Microsoft Edge 更新安装它。Windows 11 通常已经包含 WebView2。
@@ -32,6 +33,8 @@ TypelessSwitch-0.1.1-win-x64-setup.exe
 安装默认写入当前用户目录，不需要管理员权限，也不会配置开机启动。
 
 当前安装包尚未使用商业代码签名证书，Windows SmartScreen 可能显示“未知发布者”。请只从本仓库 Releases 下载，并核对 Release 页面公布的 SHA-256；如果不信任来源，请不要继续运行。
+
+程序启动后会在后台读取本仓库的 GitHub Releases 信息。发现新版本时会显示版本号，只有确认后才会下载；下载完成后会校验 GitHub 提供的 SHA-256，再询问是否打开安装程序。网络不可用时不会影响账号切换和词典功能。
 
 ## 使用
 
@@ -44,6 +47,12 @@ TypelessSwitch-0.1.1-win-x64-setup.exe
 5. 登录成功后，程序写入新会话并重新打开 Typeless。
 
 关闭登录窗口或发生错误时，程序会恢复切换前的本地状态。备份保存在系统临时目录中，名称格式为 `%TEMP%\typeless-switch-backup-*`。
+
+### 更新程序
+
+程序每次启动会自动检查 GitHub 最新 Release。也可以点击窗口右上角的“检查更新”。
+
+发现新版本后，确认下载即可；安装包会暂时保存到 `%LOCALAPPDATA%\TypelessSwitch\Updates`，校验通过后可直接打开安装程序。更新不会静默替换当前程序，安装前始终需要用户确认。
 
 ### 导出词典
 
@@ -84,6 +93,7 @@ JSON 是重新导入时使用的标准文件。导出内容可能包含个人用
 | Typeless Switch 账号摘要 | `%LOCALAPPDATA%\TypelessSwitch\accounts.json` |
 | 登录 WebView2 数据 | `%LOCALAPPDATA%\TypelessSwitch\WebView2` |
 | 默认词典导出 | Windows“文档”目录下的 `Typeless Switch\Exports` |
+| 更新安装包缓存 | `%LOCALAPPDATA%\TypelessSwitch\Updates` |
 | 切换前备份 | `%TEMP%\typeless-switch-backup-*` |
 
 `accounts.json` 只记录邮箱、Typeless 用户 ID 和最后使用时间，不保存 access token 或 refresh token。令牌只从本地登录页读取，并按 Typeless 使用的加密格式写入其本地会话文件。
@@ -117,7 +127,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 
 ```text
 artifacts\publish\win-x64\
-installer\output\TypelessSwitch-0.1.1-win-x64-setup.exe
+installer\output\TypelessSwitch-0.1.2-win-x64-setup.exe
 ```
 
 只构建自包含应用、不构建安装程序：

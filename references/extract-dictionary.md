@@ -14,6 +14,7 @@ src\TypelessSwitch.Core\
   SessionStoreService.cs     Typeless 会话加解密
   LocalStateService.cs       停止、备份、清理、恢复和重启
   DictionaryService.cs       列表、导出和并发导入
+  UpdateService.cs            GitHub Release 检查、下载和 SHA-256 校验
   AccountRegistryService.cs  非敏感账号摘要
 ```
 
@@ -29,6 +30,7 @@ GUI 只有一个主进程。没有后台服务、托盘进程、Node.js 或 Pupp
 | 设备缓存 | `%APPDATA%\Typeless\Cache\device.cache` |
 | Typeless Switch 数据 | `%LOCALAPPDATA%\TypelessSwitch` |
 | 默认词典导出 | Windows“文档”目录下的 `Typeless Switch\Exports` |
+| 更新安装包缓存 | `%LOCALAPPDATA%\TypelessSwitch\Updates` |
 | 切换备份 | `%TEMP%\typeless-switch-backup-*` |
 
 Typeless 程序依次从 `TYPELESS_APP_PATH`、`%LOCALAPPDATA%\Programs\Typeless` 和 `%ProgramFiles%\Typeless` 查找。
@@ -85,6 +87,18 @@ GUI 提供“一键导出到默认位置”和“选择导出位置”两种入�
 `Environment.SpecialFolder.MyDocuments` 动态解析，不依赖用户名或固定盘符。导出成功后，
 JSON 路径会直接填入导入框；应用启动时也会自动选中已经存在的默认 JSON。
 
+## 自动更新
+
+应用启动时以及用户点击“检查更新”时，程序请求：
+
+```text
+GET https://api.github.com/repos/StatXzy7/typeless-switch/releases/latest
+```
+
+只接受 GitHub 官方 HTTPS 地址和名称匹配 `TypelessSwitch-*-win-x64-setup.exe` 的 Windows x64 安装包。
+下载先写入 `.download` 临时文件，完成后使用 GitHub Release asset 的 SHA-256 digest 校验；校验成功才替换为安装包。
+程序不会静默安装或替换当前版本，下载和安装都需要用户确认。
+
 ## 并发导入
 
 导入前先调用列表接口，并跳过目标账号中已有的词条。
@@ -120,6 +134,7 @@ POST https://api.typeless.com/user/dictionary/add
 - 会话写入/读取往返。
 - 450 个词条拆成 200、200、50 三批并确认请求发生并发。
 - 本地状态备份、清理和失败恢复。
+- GitHub Release 版本比较、安装包选择和 SHA-256 下载校验。
 
 Release 构建入口：
 

@@ -25,6 +25,7 @@ public sealed class TypelessPaths
     public string AppDataDirectory => Path.Combine(LocalAppData, "TypelessSwitch");
     public string AccountsFile => Path.Combine(AppDataDirectory, "accounts.json");
     public string WebViewDirectory => Path.Combine(AppDataDirectory, "WebView2");
+    public string UpdatesDirectory => Path.Combine(AppDataDirectory, "Updates");
     public string DefaultExportDirectory => Path.Combine(DocumentsDirectory, "Typeless Switch", "Exports");
     public string DefaultExportJsonFile => Path.Combine(DefaultExportDirectory, "typeless-dictionary-export.json");
 

@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net.Mail;
 using System.Net.Http;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,9 +20,12 @@ public partial class MainWindow : Window
     private readonly LocalStateService _localState;
     private readonly AccountRegistryService _accounts;
     private readonly DictionaryService _dictionary;
+    private readonly UpdateService _updates;
     private TypelessSession? _session;
     private CancellationTokenSource? _operationCancellation;
     private bool _busy;
+    private bool _checkingForUpdates;
+    private bool _automaticUpdateCheckStarted;
 
     public MainWindow()
     {
@@ -29,6 +34,7 @@ public partial class MainWindow : Window
         _localState = new LocalStateService(_paths);
         _accounts = new AccountRegistryService(_paths);
         _dictionary = new DictionaryService(_httpClient);
+        _updates = new UpdateService(_httpClient);
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -37,8 +43,84 @@ public partial class MainWindow : Window
             ImportPathBox.Text = _paths.DefaultExportJsonFile;
 
         await RefreshSessionAsync();
+        if (!_automaticUpdateCheckStarted)
+        {
+            _automaticUpdateCheckStarted = true;
+            _ = CheckForUpdatesAsync(interactive: false);
+        }
     }
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) => await RefreshSessionAsync();
+    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e) => await CheckForUpdatesAsync(interactive: true);
+
+    private async Task CheckForUpdatesAsync(bool interactive)
+    {
+        if (_checkingForUpdates) return;
+        if (_busy)
+        {
+            if (interactive) ShowInfo("当前有操作正在进行，请完成后再检查更新。");
+            return;
+        }
+
+        _checkingForUpdates = true;
+        CheckUpdatesButton.IsEnabled = false;
+        try
+        {
+            var currentVersion = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(0, 1, 2);
+            var update = await _updates.CheckLatestAsync(currentVersion);
+            if (update is null)
+            {
+                if (interactive) ShowInfo($"当前已经是最新版本（v{currentVersion.ToString(3)}）。");
+                return;
+            }
+
+            var choice = MessageBox.Show(
+                this,
+                $"发现新版本 v{update.Version.ToString(3)}。\n\n是否下载并安装？安装程序会在下载完成后打开。",
+                "发现更新",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+            if (choice != MessageBoxResult.Yes) return;
+
+            string? installerPath = null;
+            var progress = new Progress<UpdateDownloadProgress>(item =>
+            {
+                var percent = item.TotalBytes <= 0 ? 5 : item.BytesDownloaded * 100d / item.TotalBytes;
+                SetStatus($"正在下载更新… {FormatBytes(item.BytesDownloaded)} / {FormatBytes(item.TotalBytes)}", percent);
+            });
+            await RunOperationAsync("正在准备下载更新…", async token =>
+            {
+                installerPath = await _updates.DownloadInstallerAsync(
+                    update, _paths.UpdatesDirectory, progress, token);
+                SetStatus("更新下载完成，正在等待确认安装…", 100);
+            });
+
+            if (installerPath is null || !File.Exists(installerPath)) return;
+            var installChoice = MessageBox.Show(
+                this,
+                "更新安装包已下载并通过 SHA-256 校验。是否现在打开安装程序？",
+                "安装更新",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+            if (installChoice != MessageBoxResult.Yes) return;
+
+            Process.Start(new ProcessStartInfo(installerPath) { UseShellExecute = true });
+            Application.Current.Shutdown();
+        }
+        catch (OperationCanceledException)
+        {
+            if (interactive) SetStatus("更新下载已取消", 0);
+        }
+        catch (Exception exception)
+        {
+            if (interactive)
+                MessageBox.Show(this, UpdateErrorMessage(exception), "检查更新失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _checkingForUpdates = false;
+            CheckUpdatesButton.IsEnabled = !_busy;
+        }
+    }
 
     private async Task RefreshSessionAsync()
     {
@@ -237,6 +319,7 @@ public partial class MainWindow : Window
     {
         _busy = busy;
         RefreshButton.IsEnabled = !busy;
+        CheckUpdatesButton.IsEnabled = !busy && !_checkingForUpdates;
         SwitchButton.IsEnabled = !busy;
         DefaultExportButton.IsEnabled = !busy;
         CustomExportButton.IsEnabled = !busy;
@@ -271,4 +354,20 @@ public partial class MainWindow : Window
         JsonException => "文件格式不正确，或 Typeless 返回了无法识别的数据。",
         _ => exception.Message
     };
+
+    private static string UpdateErrorMessage(Exception exception) => exception switch
+    {
+        HttpRequestException => "无法连接 GitHub 更新服务，请检查网络后重试。",
+        InvalidDataException => exception.Message,
+        UnauthorizedAccessException => "没有权限保存更新安装包，请检查本地磁盘权限。",
+        _ => $"更新失败：{exception.Message}"
+    };
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 0) return "未知大小";
+        if (bytes >= 1024 * 1024) return $"{bytes / 1024d / 1024d:0.0} MB";
+        if (bytes >= 1024) return $"{bytes / 1024d:0.0} KB";
+        return $"{bytes} B";
+    }
 }
