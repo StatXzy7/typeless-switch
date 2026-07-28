@@ -16,6 +16,8 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 - 在账号列表显示健康状态和最近验证时间。
 - 一键检查 Typeless、WebView2、当前会话、DPAPI 账号库、本地存储和临时备份，并可复制脱敏诊断报告。
 - 一次导出完整词典为 JSON、TXT 和 CSV。
+- 每次导入或导出前重新读取最新会话，并使用 Typeless 桌面端相同的长期凭据；短期 access token 过期不会再误报退出登录。
+- 词典接口返回 401/403 时自动重新同步会话并安全重试一次。
 - 可一键导出到当前用户的默认“文档”目录，也可自行选择文件夹。
 - 导出完成后自动选中生成的 JSON，下次启动也会自动发现默认文件。
 - 启动时自动检查 GitHub 最新版本，也可手动点击“检查更新”；下载前会先征得确认并校验 SHA-256。
@@ -29,7 +31,7 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 从仓库的 [Releases](../../releases) 页面下载名称类似下面的安装程序：
 
 ```text
-TypelessSwitch-0.3.0-win-x64-setup.exe
+TypelessSwitch-0.3.1-win-x64-setup.exe
 ```
 
 运行安装程序后，从开始菜单打开 Typeless Switch。安装包自带 .NET 8 运行时；Windows 10 若没有 WebView2 Runtime，需要先通过 Microsoft Edge 更新安装它。Windows 11 通常已经包含 WebView2。
@@ -62,6 +64,8 @@ TypelessSwitch-0.3.0-win-x64-setup.exe
 3. 程序停止 Typeless、备份当前状态、恢复所选账号并重新启动 Typeless。
 
 如果长期登录状态仍然有效，Typeless 会使用官方刷新流程续期 access token。如果 refresh token 已过期，程序会要求重新进行邮箱验证码登录。
+
+词典操作不会依赖可能已经过期的短期 access token。程序会在每次导入、导出前重新读取当前会话，并使用 Typeless 桌面端实际采用的 refresh token；如果服务端仍拒绝凭据，会重新同步会话并完整重试一次。导入重试前会重新读取目标词典并跳过已存在词条，不会重复导入已经成功的批次。
 
 列表会显示“状态可用”“需要重新登录”“会话异常”“上次验证失败”或“状态待验证”，并记录最近一次严格验证时间。旧版本迁移来的非当前账号会先显示“状态待验证”，成功切换一次后自动更新。
 
@@ -153,7 +157,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 
 ```text
 artifacts\publish\win-x64\
-installer\output\TypelessSwitch-0.3.0-win-x64-setup.exe
+installer\output\TypelessSwitch-0.3.1-win-x64-setup.exe
 ```
 
 只构建自包含应用、不构建安装程序：

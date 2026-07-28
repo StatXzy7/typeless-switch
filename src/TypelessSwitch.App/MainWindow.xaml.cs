@@ -68,7 +68,7 @@ public partial class MainWindow : Window
             try { webViewVersion = CoreWebView2Environment.GetAvailableBrowserVersionString(); }
             catch (Exception exception) when (exception is WebView2RuntimeNotFoundException or InvalidOperationException) { }
 
-            var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.3.0";
+            var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.3.1";
             report = await _diagnostics.RunAsync(version, webViewVersion, token);
             SetStatus($"自检完成：通过 {report.Passed}，警告 {report.Warnings}，失败 {report.Failed}", 100);
         });
@@ -435,12 +435,6 @@ public partial class MainWindow : Window
 
     private async void CustomExportButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_session is null)
-        {
-            ShowInfo("未读取到 Typeless 登录账号。请先登录或切换账号。");
-            return;
-        }
-
         var dialog = new OpenFolderDialog { Title = "选择词典导出文件夹", Multiselect = false };
         if (dialog.ShowDialog(this) != true) return;
 
@@ -449,15 +443,12 @@ public partial class MainWindow : Window
 
     private async Task ExportToDirectoryAsync(string outputDirectory)
     {
-        if (_session is null)
+        await RunOperationAsync("正在读取最新登录状态…", async token =>
         {
-            ShowInfo("未读取到 Typeless 登录账号。请先登录或切换账号。");
-            return;
-        }
-
-        await RunOperationAsync("正在导出词典…", async token =>
-        {
-            var result = await _dictionary.ExportAsync(_session, outputDirectory, token);
+            var result = await RunDictionaryOperationAsync(
+                "导出",
+                (session, operationToken) => _dictionary.ExportAsync(session, outputDirectory, operationToken),
+                token);
             ImportPathBox.Text = result.JsonPath;
             SetStatus($"已导出 {result.Total} 个词条到 {outputDirectory}，JSON 已可直接导入", 100);
         });
@@ -493,11 +484,6 @@ public partial class MainWindow : Window
 
     private async void ImportButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_session is null)
-        {
-            ShowInfo("未读取到 Typeless 登录账号。请先登录或切换账号。");
-            return;
-        }
         if (!File.Exists(ImportPathBox.Text))
         {
             ShowInfo("请先选择有效的 JSON 词典文件。");
@@ -515,13 +501,76 @@ public partial class MainWindow : Window
             SetStatus($"{item.Message}（成功 {item.Succeeded}，失败 {item.Failed}）", percent);
         });
 
-        await RunOperationAsync("正在检查词典…", async token =>
+        await RunOperationAsync("正在读取最新登录状态…", async token =>
         {
-            var result = await _dictionary.ImportAsync(
-                _session.AccessToken, ImportPathBox.Text, mode, concurrency, progress, token);
+            var result = await RunDictionaryOperationAsync(
+                "导入",
+                (session, operationToken) => _dictionary.ImportAsync(
+                    session.RefreshToken,
+                    ImportPathBox.Text,
+                    mode,
+                    concurrency,
+                    progress,
+                    operationToken),
+                token);
             SetStatus($"导入完成：成功 {result.Imported}，失败 {result.Failed}，跳过重复 {result.Skipped}", 100);
         });
     }
+
+    private async Task<T> RunDictionaryOperationAsync<T>(
+        string actionName,
+        Func<TypelessSession, CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken)
+    {
+        var session = await ReadLatestDictionarySessionAsync(cancellationToken);
+        T result;
+        try
+        {
+            SetStatus($"正在{actionName}词典…", 12);
+            result = await operation(session, cancellationToken);
+        }
+        catch (HttpRequestException exception) when (IsAuthenticationFailure(exception))
+        {
+            SetStatus($"{actionName}凭据被拒绝，正在重新同步 Typeless 会话并安全重试…", 18);
+            await Task.Delay(400, cancellationToken);
+            session = await ReadLatestDictionarySessionAsync(cancellationToken);
+            result = await operation(session, cancellationToken);
+        }
+
+        _session = session;
+        await SaveKnownSessionAsync(
+            session,
+            cancellationToken,
+            AccountHealthStatus.Healthy,
+            DateTimeOffset.UtcNow);
+        AccountEmailText.Text = session.Email;
+        AccountStatusText.Text = $"用户 ID：{session.UserId} · 词典凭据已验证";
+        await RefreshSavedAccountsAsync();
+        return result;
+    }
+
+    private async Task<TypelessSession> ReadLatestDictionarySessionAsync(CancellationToken cancellationToken)
+    {
+        var latest = await _sessionStore.ReadAsync(cancellationToken)
+            ?? throw new InvalidOperationException("未读取到 Typeless 登录状态，请先登录后重试。");
+        if (string.IsNullOrWhiteSpace(latest.RefreshToken) || AccountHealth.IsJwtExpired(latest.RefreshToken))
+        {
+            try
+            {
+                await _accounts.UpdateHealthAsync(
+                    latest.UserId,
+                    AccountHealthStatus.NeedsLogin,
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None);
+            }
+            catch { }
+            throw new InvalidOperationException("Typeless 长期登录凭据已失效，请重新登录后重试。");
+        }
+        return latest;
+    }
+
+    private static bool IsAuthenticationFailure(HttpRequestException exception) =>
+        exception.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
 
     private async void SwitchButton_Click(object sender, RoutedEventArgs e)
     {
@@ -681,7 +730,7 @@ public partial class MainWindow : Window
     private static string FriendlyMessage(Exception exception) => exception switch
     {
         HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden } =>
-            "Typeless 登录状态已过期或无权执行此操作，请重新登录后重试。",
+            "已重新同步 Typeless 会话，但长期登录凭据仍被拒绝或账号无权执行此操作。请在 Typeless 中重新登录后重试。",
         HttpRequestException => "无法连接 Typeless 服务，请检查网络和登录状态。",
         UnauthorizedAccessException => "没有权限访问所选文件或 Typeless 本地数据。",
         JsonException => "文件格式不正确，或 Typeless 返回了无法识别的数据。",

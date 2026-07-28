@@ -27,13 +27,13 @@ async function main() {
   fs.mkdirSync(outputDir, { recursive: true });
 
   const user = await readTypelessUser();
-  if (!user?.access_token) {
-    throw new Error('未读取到 access_token，请确认 Typeless 已登录且本机仍保留会话');
+  if (!user?.refresh_token) {
+    throw new Error('未读取到 refresh_token，请确认 Typeless 已登录且本机仍保留会话');
   }
 
   const res = await fetch(API_URL, {
     headers: {
-      Authorization: `Bearer ${user.access_token}`,
+      Authorization: `Bearer ${user.refresh_token}`,
       'Content-Type': 'application/json',
       'User-Agent': 'Typeless-Dictionary-Skill/1.0',
     },

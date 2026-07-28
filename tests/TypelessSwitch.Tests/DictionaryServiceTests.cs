@@ -9,6 +9,17 @@ namespace TypelessSwitch.Tests;
 public sealed class DictionaryServiceTests
 {
     [Fact]
+    public async Task List_UnauthorizedResponsePreservesStatusForSafeRetry()
+    {
+        var service = new DictionaryService(new HttpClient(new UnauthorizedHandler()));
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => service.ListAsync("expired"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, exception.StatusCode);
+        Assert.DoesNotContain("private-detail", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task BulkImport_ChunksAndRunsRequestsConcurrently()
     {
         var handler = new RecordingHandler();
@@ -86,7 +97,8 @@ public sealed class DictionaryServiceTests
     [Fact]
     public async Task Export_WritesJsonTextAndCsvTogether()
     {
-        var service = new DictionaryService(new HttpClient(new ExportHandler()));
+        var handler = new ExportHandler();
+        var service = new DictionaryService(new HttpClient(handler));
         var session = new TypelessSession
         {
             Email = "source@example.com",
@@ -108,6 +120,7 @@ public sealed class DictionaryServiceTests
             var exported = JsonSerializer.Deserialize<DictionaryExport>(await File.ReadAllTextAsync(result.JsonPath));
             Assert.Equal("source@example.com", exported!.Account.Email);
             Assert.Equal(2, exported.Words.Count);
+            Assert.Equal("refresh", handler.AuthorizationToken);
         }
         finally
         {
@@ -178,11 +191,25 @@ public sealed class DictionaryServiceTests
 
     private sealed class ExportHandler : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(Json("{\"status\":\"OK\",\"data\":{\"words\":["
+        public string? AuthorizationToken { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            AuthorizationToken = request.Headers.Authorization?.Parameter;
+            return Task.FromResult(Json("{\"status\":\"OK\",\"data\":{\"words\":["
                 + "{\"term\":\"hello\",\"lang\":\"en\",\"category\":\"custom\",\"auto\":true,\"replace\":false},"
                 + "{\"term\":\"comma,quote\\\"\",\"lang\":\"en\",\"category\":\"custom\",\"auto\":false,\"replace\":true}"
                 + "]}}"));
+        }
+    }
+
+    private sealed class UnauthorizedHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            {
+                Content = new StringContent("{\"detail\":\"private-detail\"}", Encoding.UTF8, "application/json")
+            });
     }
 
     private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)

@@ -16,11 +16,12 @@ public sealed class DictionaryService
 
     public DictionaryService(HttpClient httpClient) => _httpClient = httpClient;
 
-    public async Task<IReadOnlyList<DictionaryWord>> ListAsync(string accessToken, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<DictionaryWord>> ListAsync(string authToken, CancellationToken cancellationToken = default)
     {
-        using var request = CreateRequest(HttpMethod.Get, ListEndpoint, accessToken);
+        using var request = CreateRequest(HttpMethod.Get, ListEndpoint, authToken);
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureAuthenticated(response, json);
         EnsureSuccess(response, json, "读取词典");
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -35,7 +36,9 @@ public sealed class DictionaryService
         string outputDirectory,
         CancellationToken cancellationToken = default)
     {
-        var words = await ListAsync(session.AccessToken, cancellationToken);
+        // Typeless Desktop authenticates API requests with the long-lived refresh token.
+        // The access token expires after a few hours and may remain stale on disk.
+        var words = await ListAsync(session.RefreshToken, cancellationToken);
         Directory.CreateDirectory(outputDirectory);
         var jsonPath = Path.Combine(outputDirectory, "typeless-dictionary-export.json");
         var textPath = Path.Combine(outputDirectory, "typeless-dictionary-export.txt");
@@ -57,7 +60,7 @@ public sealed class DictionaryService
     }
 
     public async Task<DictionaryImportResult> ImportAsync(
-        string accessToken,
+        string authToken,
         string inputPath,
         DictionaryImportMode mode,
         int concurrency = 12,
@@ -67,7 +70,7 @@ public sealed class DictionaryService
         await using var stream = File.OpenRead(inputPath);
         var source = await JsonSerializer.DeserializeAsync<DictionaryExport>(stream, JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("导入文件不是有效的 Typeless Switch 词典文件。");
-        var existing = await ListAsync(accessToken, cancellationToken);
+        var existing = await ListAsync(authToken, cancellationToken);
         var existingKeys = mode == DictionaryImportMode.Bulk
             ? existing.Select(word => word.Term).ToHashSet(StringComparer.Ordinal)
             : existing.Select(WordKey).ToHashSet(StringComparer.Ordinal);
@@ -90,7 +93,7 @@ public sealed class DictionaryService
                 CancellationToken = cancellationToken
             }, async (chunk, token) =>
             {
-                var ok = await PostBulkAsync(accessToken, chunk, token);
+                var ok = await PostBulkAsync(authToken, chunk, token);
                 if (ok) Interlocked.Add(ref succeeded, chunk.Length); else Interlocked.Add(ref failed, chunk.Length);
                 var done = Interlocked.Add(ref completed, chunk.Length);
                 progress?.Report(new(done, toAdd.Length, Volatile.Read(ref succeeded), Volatile.Read(ref failed), $"已处理 {done}/{toAdd.Length}"));
@@ -104,7 +107,7 @@ public sealed class DictionaryService
                 CancellationToken = cancellationToken
             }, async (word, token) =>
             {
-                var ok = await PostWordAsync(accessToken, word, token);
+                var ok = await PostWordAsync(authToken, word, token);
                 if (ok) Interlocked.Increment(ref succeeded); else Interlocked.Increment(ref failed);
                 var done = Interlocked.Increment(ref completed);
                 progress?.Report(new(done, toAdd.Length, Volatile.Read(ref succeeded), Volatile.Read(ref failed), $"已处理 {done}/{toAdd.Length}"));
@@ -146,7 +149,7 @@ public sealed class DictionaryService
     {
         var request = new HttpRequestMessage(method, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.1");
+        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.3.1");
         return request;
     }
 
@@ -176,7 +179,7 @@ public sealed class DictionaryService
     {
         if (response.StatusCode is not (System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)) return;
         throw new HttpRequestException(
-            $"Typeless 登录状态无效（HTTP {(int)response.StatusCode}）。{Sanitize(content)}", null, response.StatusCode);
+            $"Typeless 长期登录凭据无效（HTTP {(int)response.StatusCode}）。", null, response.StatusCode);
     }
 
     private static string Sanitize(string value) => value.Length <= 200 ? value : value[..200];

@@ -33,10 +33,10 @@ function getArg(flag, fallback = null) {
 }
 function hasFlag(flag) { return process.argv.includes(flag); }
 
-async function getAccessToken() {
+async function getAuthToken() {
   const user = await readTypelessUser();
-  if (!user?.access_token) throw new Error('未读取到 access_token');
-  return { token: user.access_token, email: user.email, user_id: user.user_id };
+  if (!user?.refresh_token) throw new Error('未读取到 refresh_token');
+  return { token: user.refresh_token, email: user.email, user_id: user.user_id };
 }
 
 async function listExistingWords(token) {
@@ -201,7 +201,7 @@ async function main() {
 
   console.error(`[import] 待导入词条: ${wordsToImport.length} 个 (来源: ${exportData.account?.email || 'unknown'})`);
 
-  const { token, email, user_id } = await getAccessToken();
+  const { token, email, user_id } = await getAuthToken();
   console.error(`[import] 目标账号: ${email} (${user_id})`);
 
   // Check existing words to avoid duplicates
