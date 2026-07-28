@@ -53,7 +53,7 @@ public sealed class UpdateService
         using var request = new HttpRequestMessage(HttpMethod.Get, _latestReleaseEndpoint);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         request.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
-        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.2.0");
+        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.2.1");
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -94,7 +94,7 @@ public sealed class UpdateService
         CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, _latestReleasePageEndpoint);
-        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.2.0");
+        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.2.1");
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         var html = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -121,7 +121,7 @@ public sealed class UpdateService
     private async Task<string> ReadDigestAsync(Uri digestUri, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, digestUri);
-        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.2.0");
+        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.2.1");
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         var text = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -159,7 +159,7 @@ public sealed class UpdateService
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, update.DownloadUri);
-            request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.2.0");
+            request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.2.1");
             using var response = await _httpClient.SendAsync(
                 request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!response.IsSuccessStatusCode)

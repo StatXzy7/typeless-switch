@@ -15,12 +15,12 @@ public sealed class UpdateServiceTests
         var digest = Convert.ToHexString(SHA256.HashData(payload));
         var handler = new UpdateHandler($$"""
             {
-              "tag_name": "v0.2.0",
-              "html_url": "https://github.com/StatXzy7/typeless-switch/releases/tag/v0.2.0",
+              "tag_name": "v0.2.1",
+              "html_url": "https://github.com/StatXzy7/typeless-switch/releases/tag/v0.2.1",
               "assets": [
                 {
-                  "name": "TypelessSwitch-0.2.0-win-x64-setup.exe",
-                  "browser_download_url": "https://github.com/StatXzy7/typeless-switch/releases/download/v0.2.0/TypelessSwitch-0.2.0-win-x64-setup.exe",
+                  "name": "TypelessSwitch-0.2.1-win-x64-setup.exe",
+                  "browser_download_url": "https://github.com/StatXzy7/typeless-switch/releases/download/v0.2.1/TypelessSwitch-0.2.1-win-x64-setup.exe",
                   "size": {{payload.Length}},
                   "digest": "sha256:{{digest}}"
                 }
@@ -28,12 +28,12 @@ public sealed class UpdateServiceTests
             }
             """, payload);
 
-        var update = await new UpdateService(new HttpClient(handler)).CheckLatestAsync(new Version(0, 1, 2));
+        var update = await new UpdateService(new HttpClient(handler)).CheckLatestAsync(new Version(0, 2, 0));
 
         Assert.NotNull(update);
-        Assert.Equal(new Version(0, 2, 0), update.Version);
+        Assert.Equal(new Version(0, 2, 1), update.Version);
         Assert.Equal(digest, update.Sha256);
-        Assert.Equal("TypelessSwitch-0.2.0-win-x64-setup.exe", update.AssetName);
+        Assert.Equal("TypelessSwitch-0.2.1-win-x64-setup.exe", update.AssetName);
     }
 
     [Fact]

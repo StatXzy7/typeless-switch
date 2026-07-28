@@ -27,7 +27,7 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 从仓库的 [Releases](../../releases) 页面下载名称类似下面的安装程序：
 
 ```text
-TypelessSwitch-0.2.0-win-x64-setup.exe
+TypelessSwitch-0.2.1-win-x64-setup.exe
 ```
 
 运行安装程序后，从开始菜单打开 Typeless Switch。安装包自带 .NET 8 运行时；Windows 10 若没有 WebView2 Runtime，需要先通过 Microsoft Edge 更新安装它。Windows 11 通常已经包含 WebView2。
@@ -52,7 +52,7 @@ TypelessSwitch-0.2.0-win-x64-setup.exe
 
 ### 本地账号管理
 
-首次运行 v0.2.0 时，程序会将当前正在使用的 Typeless 会话保存到 Windows 当前用户专属的加密会话库。之后每次通过邮箱验证码登录的新账号也会自动加入列表。
+首次运行 v0.2.1 时，程序会将当前正在使用的 Typeless 会话保存到 Windows 当前用户专属的加密会话库。之后每次通过邮箱验证码登录的新账号也会自动加入列表。
 
 1. 在“本地账号管理”中选择已保存账号。
 2. 点击“切换到所选账号”。
@@ -142,7 +142,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 
 ```text
 artifacts\publish\win-x64\
-installer\output\TypelessSwitch-0.2.0-win-x64-setup.exe
+installer\output\TypelessSwitch-0.2.1-win-x64-setup.exe
 ```
 
 只构建自包含应用、不构建安装程序：

@@ -67,7 +67,7 @@ public partial class MainWindow : Window
         CheckUpdatesButton.IsEnabled = false;
         try
         {
-            var currentVersion = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(0, 2, 0);
+            var currentVersion = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(0, 2, 1);
             var update = await _updates.CheckLatestAsync(currentVersion);
             if (update is null)
             {
