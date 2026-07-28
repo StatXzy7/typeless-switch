@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Typeless Switch" Width="660" Height="760" MinWidth="600" MinHeight="690"
         WindowStartupLocation="CenterScreen" Background="{StaticResource PageBrush}"
-        FontFamily="Segoe UI" Foreground="{StaticResource TextBrush}" Loaded="Window_Loaded">
+        FontFamily="Segoe UI" Foreground="{StaticResource TextBrush}" Loaded="Window_Loaded"
+        Icon="Assets/typeless-switch.ico">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -52,14 +53,25 @@
                 <StackPanel>
                     <TextBlock Text="词典迁移" FontSize="17" FontWeight="SemiBold" />
                     <TextBlock Text="导出会同时生成 JSON、TXT 和 CSV；导入会自动跳过重复词条。"
-                               Foreground="{StaticResource MutedBrush}" Margin="0,5,0,13" />
-                    <Button x:Name="ExportButton" Content="导出当前词典…" HorizontalAlignment="Stretch"
-                            Style="{StaticResource SecondaryButton}" Click="ExportButton_Click" />
+                               Foreground="{StaticResource MutedBrush}" Margin="0,5,0,10" />
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Button x:Name="DefaultExportButton" Content="导出到默认位置"
+                                Click="DefaultExportButton_Click" />
+                        <Button x:Name="CustomExportButton" Grid.Column="1" Content="选择导出位置…" Margin="10,0,0,0"
+                                Style="{StaticResource SecondaryButton}" Click="CustomExportButton_Click" />
+                    </Grid>
+                    <TextBlock Text="默认位置：文档\Typeless Switch\Exports"
+                               Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="1,7,0,0" />
                     <Separator Margin="0,10,0,9" Background="{StaticResource BorderBrush}" />
                     <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <TextBox x:Name="ImportPathBox" IsReadOnly="True" ToolTip="选择 typeless-dictionary-export.json" />
-                        <Button Grid.Column="1" Content="选择文件" Margin="10,0,0,0" Style="{StaticResource QuietButton}"
+                        <Button x:Name="UseDefaultImportButton" Grid.Column="1" Content="使用默认文件" Margin="10,0,0,0"
+                                Style="{StaticResource QuietButton}" Click="UseDefaultImportButton_Click" />
+                        <Button Grid.Column="2" Content="选择文件" Margin="8,0,0,0" Style="{StaticResource QuietButton}"
                                 Click="BrowseImportButton_Click" />
                     </Grid>
                     <Grid Margin="0,8,0,0">

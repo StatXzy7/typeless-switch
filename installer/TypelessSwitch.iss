@@ -1,5 +1,5 @@
 #define MyAppName "Typeless Switch"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.1"
 #define MyAppPublisher "StatXzy7"
 #define MyAppExeName "TypelessSwitch.exe"
 
@@ -8,6 +8,7 @@ AppId={{B6970D31-4DD3-45F3-BEFE-3A4539EC0D82}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+SetupIconFile=..\src\TypelessSwitch.App\Assets\typeless-switch.ico
 DefaultDirName={localappdata}\Programs\Typeless Switch
 DefaultGroupName={#MyAppName}
 OutputDir=output

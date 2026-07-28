@@ -31,7 +31,13 @@ public partial class MainWindow : Window
         _dictionary = new DictionaryService(_httpClient);
     }
 
-    private async void Window_Loaded(object sender, RoutedEventArgs e) => await RefreshSessionAsync();
+    private async void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (File.Exists(_paths.DefaultExportJsonFile))
+            ImportPathBox.Text = _paths.DefaultExportJsonFile;
+
+        await RefreshSessionAsync();
+    }
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) => await RefreshSessionAsync();
 
     private async Task RefreshSessionAsync()
@@ -50,21 +56,49 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void ExportButton_Click(object sender, RoutedEventArgs e)
+    private async void DefaultExportButton_Click(object sender, RoutedEventArgs e) =>
+        await ExportToDirectoryAsync(_paths.DefaultExportDirectory);
+
+    private async void CustomExportButton_Click(object sender, RoutedEventArgs e)
     {
         if (_session is null)
         {
             ShowInfo("未读取到 Typeless 登录账号。请先登录或切换账号。");
             return;
         }
+
         var dialog = new OpenFolderDialog { Title = "选择词典导出文件夹", Multiselect = false };
         if (dialog.ShowDialog(this) != true) return;
 
+        await ExportToDirectoryAsync(dialog.FolderName);
+    }
+
+    private async Task ExportToDirectoryAsync(string outputDirectory)
+    {
+        if (_session is null)
+        {
+            ShowInfo("未读取到 Typeless 登录账号。请先登录或切换账号。");
+            return;
+        }
+
         await RunOperationAsync("正在导出词典…", async token =>
         {
-            var result = await _dictionary.ExportAsync(_session, dialog.FolderName, token);
-            SetStatus($"已导出 {result.Total} 个词条到 {dialog.FolderName}", 100);
+            var result = await _dictionary.ExportAsync(_session, outputDirectory, token);
+            ImportPathBox.Text = result.JsonPath;
+            SetStatus($"已导出 {result.Total} 个词条到 {outputDirectory}，JSON 已可直接导入", 100);
         });
+    }
+
+    private void UseDefaultImportButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!File.Exists(_paths.DefaultExportJsonFile))
+        {
+            ShowInfo($"默认词典文件尚不存在。请先点击“导出到默认位置”。\n\n默认位置：{_paths.DefaultExportDirectory}");
+            return;
+        }
+
+        ImportPathBox.Text = _paths.DefaultExportJsonFile;
+        SetStatus("已选择默认词典文件", 0);
     }
 
     private void BrowseImportButton_Click(object sender, RoutedEventArgs e)
@@ -204,7 +238,9 @@ public partial class MainWindow : Window
         _busy = busy;
         RefreshButton.IsEnabled = !busy;
         SwitchButton.IsEnabled = !busy;
-        ExportButton.IsEnabled = !busy;
+        DefaultExportButton.IsEnabled = !busy;
+        CustomExportButton.IsEnabled = !busy;
+        UseDefaultImportButton.IsEnabled = !busy;
         ImportButton.IsEnabled = !busy;
         ImportModeBox.IsEnabled = !busy;
         ConcurrencyBox.IsEnabled = !busy && ImportModeBox.SelectedIndex == 1;

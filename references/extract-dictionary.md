@@ -28,6 +28,7 @@ GUI 只有一个主进程。没有后台服务、托盘进程、Node.js 或 Pupp
 | 应用状态 | `%APPDATA%\Typeless.exe\app-storage.json` |
 | 设备缓存 | `%APPDATA%\Typeless\Cache\device.cache` |
 | Typeless Switch 数据 | `%LOCALAPPDATA%\TypelessSwitch` |
+| 默认词典导出 | Windows“文档”目录下的 `Typeless Switch\Exports` |
 | 切换备份 | `%TEMP%\typeless-switch-backup-*` |
 
 Typeless 程序依次从 `TYPELESS_APP_PATH`、`%LOCALAPPDATA%\Programs\Typeless` 和 `%ProgramFiles%\Typeless` 查找。
@@ -79,6 +80,10 @@ GET https://api.typeless.com/user/dictionary/list?size=10000
 - JSON：完整结构化备份，也是标准导入源。
 - TXT：每行一个词条。
 - CSV：词条、语言、分类、自动和替换标志。
+
+GUI 提供“一键导出到默认位置”和“选择导出位置”两种入口。默认目录通过
+`Environment.SpecialFolder.MyDocuments` 动态解析，不依赖用户名或固定盘符。导出成功后，
+JSON 路径会直接填入导入框；应用启动时也会自动选中已经存在的默认 JSON。
 
 ## 并发导入
 

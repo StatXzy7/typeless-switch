@@ -12,6 +12,8 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 - 使用邮箱验证码切换账号。
 - 切换前自动备份本地状态；取消或失败时自动恢复。
 - 一次导出完整词典为 JSON、TXT 和 CSV。
+- 可一键导出到当前用户的默认“文档”目录，也可自行选择文件夹。
+- 导出完成后自动选中生成的 JSON，下次启动也会自动发现默认文件。
 - 批量导入时按每批最多 200 个词条拆分，并行提交多个批次。
 - 完整导入模式使用可控并发，保留语言、分类、自动替换和替换目标等元数据。
 - 自动跳过目标账号中已经存在的词条。
@@ -22,14 +24,14 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 从仓库的 [Releases](../../releases) 页面下载名称类似下面的安装程序：
 
 ```text
-TypelessSwitch-0.1.0-win-x64-setup.exe
+TypelessSwitch-0.1.1-win-x64-setup.exe
 ```
 
 运行安装程序后，从开始菜单打开 Typeless Switch。安装包自带 .NET 8 运行时；Windows 10 若没有 WebView2 Runtime，需要先通过 Microsoft Edge 更新安装它。Windows 11 通常已经包含 WebView2。
 
 安装默认写入当前用户目录，不需要管理员权限，也不会配置开机启动。
 
-当前 `v0.1.0` 安装包尚未使用商业代码签名证书，Windows SmartScreen 可能显示“未知发布者”。请只从本仓库 Releases 下载，并核对 Release 页面公布的 SHA-256；如果不信任来源，请不要继续运行。
+当前安装包尚未使用商业代码签名证书，Windows SmartScreen 可能显示“未知发布者”。请只从本仓库 Releases 下载，并核对 Release 页面公布的 SHA-256；如果不信任来源，请不要继续运行。
 
 ## 使用
 
@@ -46,8 +48,8 @@ TypelessSwitch-0.1.0-win-x64-setup.exe
 ### 导出词典
 
 1. 确认窗口顶部显示的是需要导出的账号。
-2. 点击“导出当前词典”。
-3. 选择一个文件夹。
+2. 点击“导出到默认位置”，文件会保存到当前用户的“文档\Typeless Switch\Exports”；或点击“选择导出位置…”自行选择文件夹。
+3. 导出成功后，生成的 JSON 会自动填入导入框，无需再次查找。
 
 程序会同时创建：
 
@@ -61,7 +63,7 @@ JSON 是重新导入时使用的标准文件。导出内容可能包含个人用
 
 ### 导入词典
 
-1. 点击“选择文件”，选择之前导出的 JSON。
+1. 使用导出后自动填入的 JSON；也可以点击“使用默认文件”或“选择文件”。
 2. 选择导入模式。
 3. 点击“开始导入”。
 
@@ -81,6 +83,7 @@ JSON 是重新导入时使用的标准文件。导出内容可能包含个人用
 | Typeless 设备缓存 | `%APPDATA%\Typeless\Cache\device.cache` |
 | Typeless Switch 账号摘要 | `%LOCALAPPDATA%\TypelessSwitch\accounts.json` |
 | 登录 WebView2 数据 | `%LOCALAPPDATA%\TypelessSwitch\WebView2` |
+| 默认词典导出 | Windows“文档”目录下的 `Typeless Switch\Exports` |
 | 切换前备份 | `%TEMP%\typeless-switch-backup-*` |
 
 `accounts.json` 只记录邮箱、Typeless 用户 ID 和最后使用时间，不保存 access token 或 refresh token。令牌只从本地登录页读取，并按 Typeless 使用的加密格式写入其本地会话文件。
@@ -114,7 +117,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 
 ```text
 artifacts\publish\win-x64\
-installer\output\TypelessSwitch-0.1.0-win-x64-setup.exe
+installer\output\TypelessSwitch-0.1.1-win-x64-setup.exe
 ```
 
 只构建自包含应用、不构建安装程序：

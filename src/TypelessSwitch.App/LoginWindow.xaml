@@ -4,7 +4,8 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="登录 Typeless" Width="920" Height="720" MinWidth="760" MinHeight="560"
         WindowStartupLocation="CenterOwner" Background="{StaticResource PageBrush}"
-        FontFamily="Segoe UI" Closing="Window_Closing" Loaded="Window_Loaded">
+        FontFamily="Segoe UI" Closing="Window_Closing" Loaded="Window_Loaded"
+        Icon="Assets/typeless-switch.ico">
     <Grid Margin="18">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <StackPanel Margin="2,0,0,14">

@@ -25,15 +25,16 @@ Typeless Switch Windows 使用说明
 ------------
 
 1. 确认窗口顶部显示正确的源账号。
-2. 点击“导出当前词典”。
-3. 选择保存文件夹。
+2. 点击“导出到默认位置”，文件会保存到当前用户的“文档\Typeless Switch\Exports”；
+   或点击“选择导出位置…”自行选择文件夹。
+3. 导出后生成的 JSON 会自动成为待导入文件。
 
 导出会一次生成 JSON、TXT、CSV 三个文件。JSON 是后续导入的标准文件。
 
 四、导入词典
 ------------
 
-1. 点击“选择文件”，选择 typeless-dictionary-export.json。
+1. 直接使用导出后自动选中的 JSON；也可以点击“使用默认文件”或“选择文件”。
 2. 选择“快速批量”或“完整元数据”。
 3. 点击“开始导入”。
 
@@ -45,6 +46,7 @@ Typeless Switch Windows 使用说明
 
 Typeless 数据通过 %APPDATA% 自动定位。
 Typeless Switch 自身数据保存在 %LOCALAPPDATA%\TypelessSwitch。
+默认词典导出位置由 Windows“文档”目录动态确定，通常显示为“文档\Typeless Switch\Exports”。
 临时备份保存在 %TEMP%\typeless-switch-backup-*。
 
 不要在公共问题、截图或聊天中公开 token、user-data.json 或个人词典。
