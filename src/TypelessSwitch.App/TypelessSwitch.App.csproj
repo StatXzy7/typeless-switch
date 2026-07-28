@@ -18,7 +18,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <AssemblyName>TypelessSwitch</AssemblyName>
     <RootNamespace>TypelessSwitch.App</RootNamespace>
-    <Version>0.2.1</Version>
+    <Version>0.3.0</Version>
     <ApplicationIcon>Assets\typeless-switch.ico</ApplicationIcon>
     <Authors>StatXzy7</Authors>
     <Product>Typeless Switch</Product>

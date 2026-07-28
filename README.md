@@ -12,7 +12,9 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 - 显示本机保存的账号，并支持一键切换和移除本地记录。
 - 使用 Windows DPAPI 为当前 Windows 用户加密保存每个账号的登录状态。
 - 使用邮箱验证码切换账号。
-- 切换前自动备份本地状态；取消或失败时自动恢复。
+- 切换后重新读取邮箱和用户 ID，连续确认身份一致后才提交；失败时自动恢复原账号。
+- 在账号列表显示健康状态和最近验证时间。
+- 一键检查 Typeless、WebView2、当前会话、DPAPI 账号库、本地存储和临时备份，并可复制脱敏诊断报告。
 - 一次导出完整词典为 JSON、TXT 和 CSV。
 - 可一键导出到当前用户的默认“文档”目录，也可自行选择文件夹。
 - 导出完成后自动选中生成的 JSON，下次启动也会自动发现默认文件。
@@ -27,7 +29,7 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 从仓库的 [Releases](../../releases) 页面下载名称类似下面的安装程序：
 
 ```text
-TypelessSwitch-0.2.1-win-x64-setup.exe
+TypelessSwitch-0.3.0-win-x64-setup.exe
 ```
 
 运行安装程序后，从开始菜单打开 Typeless Switch。安装包自带 .NET 8 运行时；Windows 10 若没有 WebView2 Runtime，需要先通过 Microsoft Edge 更新安装它。Windows 11 通常已经包含 WebView2。
@@ -47,12 +49,13 @@ TypelessSwitch-0.2.1-win-x64-setup.exe
 3. 点击“切换账号”。程序会先关闭 Typeless 并备份当前本地状态。
 4. 在登录窗口中继续邮箱登录并填写六位验证码。
 5. 登录成功后，程序写入新会话并重新打开 Typeless。
+6. 程序会在 Typeless 启动后连续读取当前账号，只有邮箱和用户 ID 都与目标账号一致才算成功。
 
-关闭登录窗口或发生错误时，程序会恢复切换前的本地状态。操作期间的备份位于 `%TEMP%\typeless-switch-backup-*`，切换成功或回滚完成后会自动删除；仅当恢复本身失败时才会保留，以便排查和手动恢复。
+关闭登录窗口、Typeless 启动失败或身份验证不一致时，程序会先停止新进程，再恢复切换前的本地状态。操作期间的备份位于 `%TEMP%\typeless-switch-backup-*`，切换成功或回滚完成后会自动删除；仅当恢复本身失败时才会保留，以便排查和手动恢复。
 
 ### 本地账号管理
 
-首次运行 v0.2.1 时，程序会将当前正在使用的 Typeless 会话保存到 Windows 当前用户专属的加密会话库。之后每次通过邮箱验证码登录的新账号也会自动加入列表。
+程序会将当前正在使用的 Typeless 会话保存到 Windows 当前用户专属的加密会话库。之后每次通过邮箱验证码登录的新账号也会自动加入列表。
 
 1. 在“本地账号管理”中选择已保存账号。
 2. 点击“切换到所选账号”。
@@ -60,7 +63,15 @@ TypelessSwitch-0.2.1-win-x64-setup.exe
 
 如果长期登录状态仍然有效，Typeless 会使用官方刷新流程续期 access token。如果 refresh token 已过期，程序会要求重新进行邮箱验证码登录。
 
+列表会显示“状态可用”“需要重新登录”“会话异常”“上次验证失败”或“状态待验证”，并记录最近一次严格验证时间。旧版本迁移来的非当前账号会先显示“状态待验证”，成功切换一次后自动更新。
+
 “移除本地记录”只删除本机的账号摘要和加密会话，不会注销或删除 Typeless 远程账号。当前正在使用的账号不能直接移除，需要先切换到其他账号。
+
+### 环境自检
+
+点击窗口右上角“一键自检”，程序会在本机检查 Windows 平台、Typeless 安装、WebView2 Runtime、应用数据写入、当前会话、DPAPI 加密账号库、Typeless 进程和遗留临时备份。自检不会调用 Typeless 私有接口，也不会常驻后台。
+
+结果可以复制为脱敏报告。报告只使用 `%APPDATA%`、`%LOCALAPPDATA%` 等通用路径表达，并会再次过滤邮箱、用户 ID、令牌、Windows 用户名和绝对路径。
 
 ### 更新程序
 
@@ -142,7 +153,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 
 ```text
 artifacts\publish\win-x64\
-installer\output\TypelessSwitch-0.2.1-win-x64-setup.exe
+installer\output\TypelessSwitch-0.3.0-win-x64-setup.exe
 ```
 
 只构建自包含应用、不构建安装程序：

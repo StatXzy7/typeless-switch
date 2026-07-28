@@ -17,6 +17,9 @@ src\TypelessSwitch.Core\
   UpdateService.cs            GitHub Release 检查、下载和 SHA-256 校验
   AccountRegistryService.cs  非敏感账号摘要
   AccountVaultService.cs     Windows DPAPI 加密账号会话
+  AccountHealth.cs           账号健康状态和身份比较
+  SessionVerificationService.cs  切换后稳定身份验证
+  EnvironmentDiagnosticsService.cs  本地自检与脱敏报告
 ```
 
 GUI 只有一个主进程。没有后台服务、托盘进程、Node.js 或 Puppeteer 运行时。WebView2 只在账号切换期间初始化。
@@ -59,9 +62,11 @@ Typeless 程序依次从 `TYPELESS_APP_PATH`、`%LOCALAPPDATA%\Programs\Typeless
   → 读取登录页 localStorage token
   → 加密写入新会话
   → 启动 Typeless
+  → 连续重新读取会话并比较邮箱和用户 ID
+  → 验证成功才提交；否则停止新进程并回滚
 ```
 
-只要登录被取消或写入失败，就从备份恢复原目录和设备缓存，然后重新启动 Typeless。备份放在操作系统临时目录，不写入仓库。
+只要登录被取消、写入失败、Typeless 未启动或身份验证不一致，就从备份恢复原目录和设备缓存，然后按原运行状态决定是否重新启动 Typeless。备份放在操作系统临时目录，不写入仓库。
 
 WebView2 读取的 localStorage 键为：
 
@@ -83,10 +88,18 @@ MAXAI_CLIENT__FEATURES__AUTH__TOKEN_INFO
   → 备份当前本地状态
   → 清理旧账号会话与浏览器缓存（保留 device.cache）
   → 写入所选账号会话
-  → 启动 Typeless，由官方客户端验证或刷新 token
+  → 启动 Typeless
+  → 延迟后连续两次读取会话，严格比较邮箱和用户 ID
+  → 成功后记录健康状态与最近验证时间
 ```
 
 任何步骤失败都会恢复切换前的目录和 Typeless 进程状态。恢复前会验证备份路径与存在性，成功切换或回滚后会清理临时备份；恢复本身失败时保留备份。refresh token 过期时不会强行恢复，而是引导用户重新登录。
+
+## 本地环境自检
+
+`EnvironmentDiagnosticsService` 只执行本地、按需检查，不创建后台服务。检查项包括 Windows 平台、Typeless 程序、WebView2 Runtime、应用数据目录写入、当前会话、DPAPI 账号库、Typeless 进程和遗留临时备份。
+
+诊断报告不包含账号身份或凭据，并在输出时再次过滤邮箱、JWT/令牌、Windows 用户名和绝对路径。路径只以 `%APPDATA%`、`%LOCALAPPDATA%` 等通用表达出现。
 
 ## 词典导出
 
@@ -156,6 +169,9 @@ POST https://api.typeless.com/user/dictionary/add
 - GitHub Release 版本比较、安装包选择和 SHA-256 下载校验。
 - DPAPI 会话保存、读取、删除及明文不可见检查。
 - 保存账号切换时清理旧会话并保留设备缓存。
+- 账号健康判断、旧账号元数据兼容和最近验证状态写入。
+- 切换后连续身份读取及不一致拒绝逻辑。
+- 诊断报告对邮箱、用户名、令牌和绝对路径的脱敏。
 
 Release 构建入口：
 

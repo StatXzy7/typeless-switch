@@ -6,7 +6,9 @@ namespace TypelessSwitch.Core;
 public sealed record AccountRecord(
     [property: JsonPropertyName("email")] string Email,
     [property: JsonPropertyName("user_id")] string UserId,
-    [property: JsonPropertyName("last_used_at")] DateTimeOffset LastUsedAt);
+    [property: JsonPropertyName("last_used_at")] DateTimeOffset LastUsedAt,
+    [property: JsonPropertyName("health_status")] AccountHealthStatus HealthStatus = AccountHealthStatus.Unknown,
+    [property: JsonPropertyName("last_verified_at")] DateTimeOffset? LastVerifiedAt = null);
 
 public sealed class AccountRegistryService
 {
@@ -41,6 +43,24 @@ public sealed class AccountRegistryService
         var accounts = (await LoadAsync(cancellationToken))
             .Where(item => !string.Equals(item.UserId, userId, StringComparison.Ordinal))
             .ToList();
+        await WriteAsync(accounts, cancellationToken);
+    }
+
+    public async Task UpdateHealthAsync(
+        string userId,
+        AccountHealthStatus healthStatus,
+        DateTimeOffset? verifiedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var accounts = (await LoadAsync(cancellationToken)).ToList();
+        var index = accounts.FindIndex(item =>
+            string.Equals(item.UserId, userId, StringComparison.Ordinal));
+        if (index < 0) return;
+        accounts[index] = accounts[index] with
+        {
+            HealthStatus = healthStatus,
+            LastVerifiedAt = verifiedAt
+        };
         await WriteAsync(accounts, cancellationToken);
     }
 

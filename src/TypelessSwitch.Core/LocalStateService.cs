@@ -126,11 +126,33 @@ public sealed class LocalStateService
         }
     }
 
-    public void StartTypeless()
+    public bool StartTypeless()
     {
         var executable = _paths.FindTypelessExecutable();
-        if (executable is null) return;
-        Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true });
+        if (executable is null) return false;
+        return Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true }) is not null;
+    }
+
+    public async Task<bool> WaitForTypelessRunningAsync(
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        var deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(8));
+        while (DateTimeOffset.UtcNow <= deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var processes = Process.GetProcessesByName("Typeless");
+            try
+            {
+                if (processes.Length > 0) return true;
+            }
+            finally
+            {
+                foreach (var process in processes) process.Dispose();
+            }
+            await Task.Delay(250, cancellationToken);
+        }
+        return false;
     }
 
     private async Task ClearAppStorageAsync(CancellationToken cancellationToken)

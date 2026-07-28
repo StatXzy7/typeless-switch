@@ -70,4 +70,33 @@ public sealed class AccountVaultServiceTests
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task AccountRegistry_LoadsLegacyRecordsAndPersistsHealthMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"typeless-switch-registry-{Guid.NewGuid():N}");
+        var paths = new TypelessPaths(localAppData: Path.Combine(root, "local"));
+        var registry = new AccountRegistryService(paths);
+        Directory.CreateDirectory(paths.AppDataDirectory);
+        await File.WriteAllTextAsync(paths.AccountsFile, """
+            [{"email":"legacy@example.com","user_id":"legacy","last_used_at":"2026-07-28T00:00:00+00:00"}]
+            """);
+
+        try
+        {
+            var legacy = Assert.Single(await registry.LoadAsync());
+            Assert.Equal(AccountHealthStatus.Unknown, legacy.HealthStatus);
+            Assert.Null(legacy.LastVerifiedAt);
+
+            var verifiedAt = DateTimeOffset.Parse("2026-07-28T01:00:00+00:00");
+            await registry.UpdateHealthAsync("legacy", AccountHealthStatus.Healthy, verifiedAt);
+            var updated = Assert.Single(await registry.LoadAsync());
+            Assert.Equal(AccountHealthStatus.Healthy, updated.HealthStatus);
+            Assert.Equal(verifiedAt, updated.LastVerifiedAt);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
 }

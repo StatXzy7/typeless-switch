@@ -25,8 +25,12 @@
                     <TextBlock Text="Typeless Switch" FontSize="28" FontWeight="Bold" />
                     <TextBlock Text="管理账号、快速切换与迁移词典，完成后即可关闭。" Foreground="{StaticResource MutedBrush}" FontSize="14" Margin="0,5,0,0" />
                 </StackPanel>
-                <Button x:Name="CheckUpdatesButton" Grid.Column="1" Content="检查更新" Style="{StaticResource QuietButton}"
-                        VerticalAlignment="Center" Margin="14,0,0,0" Click="CheckUpdatesButton_Click" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                    <Button x:Name="DiagnosticsButton" Content="一键自检" Style="{StaticResource QuietButton}"
+                            Click="DiagnosticsButton_Click" />
+                    <Button x:Name="CheckUpdatesButton" Content="检查更新" Style="{StaticResource QuietButton}"
+                            Margin="8,0,0,0" Click="CheckUpdatesButton_Click" />
+                </StackPanel>
             </Grid>
             <Border Grid.Row="1" Background="{StaticResource CardBrush}" BorderBrush="{StaticResource BorderBrush}"
                     BorderThickness="1" CornerRadius="12" Padding="20" Margin="0,0,0,10">
