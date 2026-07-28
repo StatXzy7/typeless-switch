@@ -149,7 +149,7 @@ public sealed class DictionaryService
     {
         var request = new HttpRequestMessage(method, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.3.1");
+        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.3.2");
         return request;
     }
 

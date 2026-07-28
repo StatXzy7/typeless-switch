@@ -68,7 +68,7 @@ public partial class MainWindow : Window
             try { webViewVersion = CoreWebView2Environment.GetAvailableBrowserVersionString(); }
             catch (Exception exception) when (exception is WebView2RuntimeNotFoundException or InvalidOperationException) { }
 
-            var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.3.1";
+            var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.3.2";
             report = await _diagnostics.RunAsync(version, webViewVersion, token);
             SetStatus($"自检完成：通过 {report.Passed}，警告 {report.Warnings}，失败 {report.Failed}", 100);
         });
@@ -693,7 +693,20 @@ public partial class MainWindow : Window
         }
     }
 
-    private void CancelButton_Click(object sender, RoutedEventArgs e) => _operationCancellation?.Cancel();
+    private void CancelButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy)
+        {
+            CancelButton.IsEnabled = false;
+            StatusText.Text = "正在取消操作…";
+            _operationCancellation?.Cancel();
+            return;
+        }
+
+        StatusPanel.Visibility = Visibility.Collapsed;
+        StatusText.Text = string.Empty;
+        OperationProgress.Value = 0;
+    }
 
     private void SetBusy(bool busy)
     {
@@ -708,12 +721,18 @@ public partial class MainWindow : Window
         ImportButton.IsEnabled = !busy;
         ImportModeBox.IsEnabled = !busy;
         ConcurrencyBox.IsEnabled = !busy && ImportModeBox.SelectedIndex == 1;
-        CancelButton.IsEnabled = busy;
+        StatusPanel.Visibility = Visibility.Visible;
+        CancelButton.Content = busy ? "取消" : "×";
+        CancelButton.FontSize = busy ? 14 : 20;
+        CancelButton.ToolTip = busy ? "取消当前操作" : "关闭状态提示";
+        CancelButton.IsEnabled = true;
+        OperationProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         UpdateSavedAccountButtons();
     }
 
     private void SetStatus(string message, double percent)
     {
+        StatusPanel.Visibility = Visibility.Visible;
         StatusText.Text = message;
         OperationProgress.Value = Math.Clamp(percent, 0, 100);
     }

@@ -18,6 +18,7 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 - 一次导出完整词典为 JSON、TXT 和 CSV。
 - 每次导入或导出前重新读取最新会话，并使用 Typeless 桌面端相同的长期凭据；短期 access token 过期不会再误报退出登录。
 - 词典接口返回 401/403 时自动重新同步会话并安全重试一次。
+- 底部状态栏在操作进行中显示“取消”，操作结束或取消后切换为“×”，可随时关闭整个提示栏。
 - 可一键导出到当前用户的默认“文档”目录，也可自行选择文件夹。
 - 导出完成后自动选中生成的 JSON，下次启动也会自动发现默认文件。
 - 启动时自动检查 GitHub 最新版本，也可手动点击“检查更新”；下载前会先征得确认并校验 SHA-256。
@@ -31,7 +32,7 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 从仓库的 [Releases](../../releases) 页面下载名称类似下面的安装程序：
 
 ```text
-TypelessSwitch-0.3.1-win-x64-setup.exe
+TypelessSwitch-0.3.2-win-x64-setup.exe
 ```
 
 运行安装程序后，从开始菜单打开 Typeless Switch。安装包自带 .NET 8 运行时；Windows 10 若没有 WebView2 Runtime，需要先通过 Microsoft Edge 更新安装它。Windows 11 通常已经包含 WebView2。
@@ -157,7 +158,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 
 ```text
 artifacts\publish\win-x64\
-installer\output\TypelessSwitch-0.3.1-win-x64-setup.exe
+installer\output\TypelessSwitch-0.3.2-win-x64-setup.exe
 ```
 
 只构建自包含应用、不构建安装程序：

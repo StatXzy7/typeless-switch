@@ -132,17 +132,19 @@
             </Border>
         </Grid>
         </ScrollViewer>
-        <Border Grid.Row="1" Background="#F0F1F7" CornerRadius="10" Padding="15" Margin="20,0,20,14">
+        <Border x:Name="StatusPanel" Grid.Row="1" Background="#F0F1F7" CornerRadius="10"
+                Padding="15" Margin="20,0,20,14" Visibility="Collapsed">
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <TextBlock x:Name="StatusText" Text="准备就绪" TextWrapping="Wrap" VerticalAlignment="Center" />
-                    <Button x:Name="CancelButton" Grid.Column="1" Content="取消" Margin="12,0,0,0"
-                            Style="{StaticResource QuietButton}" IsEnabled="False" Click="CancelButton_Click" />
+                    <TextBlock x:Name="StatusText" Text="" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <Button x:Name="CancelButton" Grid.Column="1" Content="×" Width="46" Margin="12,0,0,0"
+                            Padding="0" FontSize="20" ToolTip="关闭状态提示"
+                            Style="{StaticResource QuietButton}" Click="CancelButton_Click" />
                 </Grid>
                 <ProgressBar x:Name="OperationProgress" Grid.Row="1" Height="6" Margin="0,12,0,0"
-                             Minimum="0" Maximum="100" Value="0" />
+                             Minimum="0" Maximum="100" Value="0" Visibility="Collapsed" />
             </Grid>
         </Border>
     </Grid>
