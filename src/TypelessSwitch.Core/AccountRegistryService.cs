@@ -29,10 +29,34 @@ public sealed class AccountRegistryService
     public async Task SaveAsync(AccountRecord account, CancellationToken cancellationToken = default)
     {
         var accounts = (await LoadAsync(cancellationToken)).ToList();
-        accounts.RemoveAll(item => string.Equals(item.Email, account.Email, StringComparison.OrdinalIgnoreCase));
+        accounts.RemoveAll(item =>
+            string.Equals(item.UserId, account.UserId, StringComparison.Ordinal) ||
+            string.Equals(item.Email, account.Email, StringComparison.OrdinalIgnoreCase));
         accounts.Insert(0, account);
+        await WriteAsync(accounts, cancellationToken);
+    }
+
+    public async Task DeleteAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        var accounts = (await LoadAsync(cancellationToken))
+            .Where(item => !string.Equals(item.UserId, userId, StringComparison.Ordinal))
+            .ToList();
+        await WriteAsync(accounts, cancellationToken);
+    }
+
+    private async Task WriteAsync(IReadOnlyList<AccountRecord> accounts, CancellationToken cancellationToken)
+    {
         Directory.CreateDirectory(_paths.AppDataDirectory);
-        await using var stream = File.Create(_paths.AccountsFile);
-        await JsonSerializer.SerializeAsync(stream, accounts, Options, cancellationToken);
+        var temporaryFile = _paths.AccountsFile + $".{Guid.NewGuid():N}.tmp";
+        try
+        {
+            await using (var stream = File.Create(temporaryFile))
+                await JsonSerializer.SerializeAsync(stream, accounts, Options, cancellationToken);
+            File.Move(temporaryFile, _paths.AccountsFile, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryFile)) File.Delete(temporaryFile);
+        }
     }
 }

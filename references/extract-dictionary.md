@@ -16,6 +16,7 @@ src\TypelessSwitch.Core\
   DictionaryService.cs       列表、导出和并发导入
   UpdateService.cs            GitHub Release 检查、下载和 SHA-256 校验
   AccountRegistryService.cs  非敏感账号摘要
+  AccountVaultService.cs     Windows DPAPI 加密账号会话
 ```
 
 GUI 只有一个主进程。没有后台服务、托盘进程、Node.js 或 Puppeteer 运行时。WebView2 只在账号切换期间初始化。
@@ -29,9 +30,10 @@ GUI 只有一个主进程。没有后台服务、托盘进程、Node.js 或 Pupp
 | 应用状态 | `%APPDATA%\Typeless.exe\app-storage.json` |
 | 设备缓存 | `%APPDATA%\Typeless\Cache\device.cache` |
 | Typeless Switch 数据 | `%LOCALAPPDATA%\TypelessSwitch` |
+| 加密账号会话 | `%LOCALAPPDATA%\TypelessSwitch\AccountVault\*.session` |
 | 默认词典导出 | Windows“文档”目录下的 `Typeless Switch\Exports` |
 | 更新安装包缓存 | `%LOCALAPPDATA%\TypelessSwitch\Updates` |
-| 切换备份 | `%TEMP%\typeless-switch-backup-*` |
+| 切换临时备份 | `%TEMP%\typeless-switch-backup-*`（操作完成后自动删除） |
 
 Typeless 程序依次从 `TYPELESS_APP_PATH`、`%LOCALAPPDATA%\Programs\Typeless` 和 `%ProgramFiles%\Typeless` 查找。
 
@@ -68,6 +70,23 @@ MAXAI_CLIENT__FEATURES__AUTH__TOKEN_INFO
 ```
 
 程序不会把 token 写入日志或 `accounts.json`。
+
+## 本地账号会话库
+
+`AccountVaultService` 按 Typeless 用户 ID 的 SHA-256 建立不含个人信息的文件名，将完整会话 JSON 使用 Windows DPAPI `CurrentUser` 加密。明文只在内存中短暂存在，并在序列化或解密完成后清零。
+
+保存账号切换流程：
+
+```text
+加密保存当前账号
+  → 停止 Typeless
+  → 备份当前本地状态
+  → 清理旧账号会话与浏览器缓存（保留 device.cache）
+  → 写入所选账号会话
+  → 启动 Typeless，由官方客户端验证或刷新 token
+```
+
+任何步骤失败都会恢复切换前的目录和 Typeless 进程状态。恢复前会验证备份路径与存在性，成功切换或回滚后会清理临时备份；恢复本身失败时保留备份。refresh token 过期时不会强行恢复，而是引导用户重新登录。
 
 ## 词典导出
 
@@ -135,6 +154,8 @@ POST https://api.typeless.com/user/dictionary/add
 - 450 个词条拆成 200、200、50 三批并确认请求发生并发。
 - 本地状态备份、清理和失败恢复。
 - GitHub Release 版本比较、安装包选择和 SHA-256 下载校验。
+- DPAPI 会话保存、读取、删除及明文不可见检查。
+- 保存账号切换时清理旧会话并保留设备缓存。
 
 Release 构建入口：
 

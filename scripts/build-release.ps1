@@ -50,7 +50,11 @@ try {
         & $isccPath '.\installer\TypelessSwitch.iss'
         if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
 
-        $installerPath = Join-Path $repoRootFull 'installer\output\TypelessSwitch-0.1.3-win-x64-setup.exe'
+        $versionDefinition = Select-String -LiteralPath '.\installer\TypelessSwitch.iss' `
+            -Pattern '^#define MyAppVersion "([^"]+)"$' | Select-Object -First 1
+        if (-not $versionDefinition) { throw 'Installer version definition not found.' }
+        $installerVersion = $versionDefinition.Matches[0].Groups[1].Value
+        $installerPath = Join-Path $repoRootFull "installer\output\TypelessSwitch-$installerVersion-win-x64-setup.exe"
         if (Test-Path -LiteralPath $installerPath) {
             $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
             "$installerHash  $(Split-Path -Leaf $installerPath)" |

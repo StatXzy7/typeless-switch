@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private readonly SessionStoreService _sessionStore;
     private readonly LocalStateService _localState;
     private readonly AccountRegistryService _accounts;
+    private readonly AccountVaultService _vault;
     private readonly DictionaryService _dictionary;
     private readonly UpdateService _updates;
     private TypelessSession? _session;
@@ -33,6 +34,7 @@ public partial class MainWindow : Window
         _sessionStore = new SessionStoreService(_paths);
         _localState = new LocalStateService(_paths);
         _accounts = new AccountRegistryService(_paths);
+        _vault = new AccountVaultService(_paths);
         _dictionary = new DictionaryService(_httpClient);
         _updates = new UpdateService(_httpClient);
     }
@@ -65,7 +67,7 @@ public partial class MainWindow : Window
         CheckUpdatesButton.IsEnabled = false;
         try
         {
-            var currentVersion = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(0, 1, 2);
+            var currentVersion = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(0, 2, 0);
             var update = await _updates.CheckLatestAsync(currentVersion);
             if (update is null)
             {
@@ -129,6 +131,8 @@ public partial class MainWindow : Window
             _session = await _sessionStore.ReadAsync();
             AccountEmailText.Text = _session?.Email ?? "未检测到登录账号";
             AccountStatusText.Text = _session is null ? "请先登录 Typeless，或直接切换账号" : $"用户 ID：{_session.UserId}";
+            if (_session is not null)
+                await SaveKnownSessionAsync(_session, CancellationToken.None);
         }
         catch (Exception exception)
         {
@@ -136,6 +140,160 @@ public partial class MainWindow : Window
             AccountEmailText.Text = "无法读取本地会话";
             AccountStatusText.Text = FriendlyMessage(exception);
         }
+
+        await RefreshSavedAccountsAsync();
+    }
+
+    private async Task SaveKnownSessionAsync(TypelessSession session, CancellationToken cancellationToken)
+    {
+        await _vault.SaveAsync(session, cancellationToken);
+        await _accounts.SaveAsync(
+            new AccountRecord(session.Email, session.UserId, DateTimeOffset.UtcNow),
+            cancellationToken);
+    }
+
+    private async Task RefreshSavedAccountsAsync()
+    {
+        var selectedUserId = (SavedAccountsList.SelectedItem as SavedAccountItem)?.UserId;
+        try
+        {
+            var records = await _accounts.LoadAsync();
+            var items = records.Select(record => new SavedAccountItem(
+                record.Email,
+                record.UserId,
+                _vault.HasSession(record.UserId),
+                string.Equals(record.UserId, _session?.UserId, StringComparison.Ordinal),
+                record.LastUsedAt.ToLocalTime())).ToArray();
+            SavedAccountsList.ItemsSource = items;
+            SavedAccountsList.SelectedItem = items.FirstOrDefault(item =>
+                string.Equals(item.UserId, selectedUserId, StringComparison.Ordinal)) ?? items.FirstOrDefault();
+        }
+        catch (Exception exception)
+        {
+            SavedAccountsList.ItemsSource = Array.Empty<SavedAccountItem>();
+            SetStatus($"无法读取本地账号列表：{FriendlyMessage(exception)}", 0);
+        }
+
+        UpdateSavedAccountButtons();
+    }
+
+    private void SavedAccountsList_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        UpdateSavedAccountButtons();
+
+    private void UpdateSavedAccountButtons()
+    {
+        if (SwitchSavedAccountButton is null || RemoveSavedAccountButton is null) return;
+        var selected = SavedAccountsList.SelectedItem as SavedAccountItem;
+        SwitchSavedAccountButton.IsEnabled = !_busy && selected is not null && !selected.IsCurrent;
+        RemoveSavedAccountButton.IsEnabled = !_busy && selected is not null && !selected.IsCurrent;
+    }
+
+    private async void SwitchSavedAccountButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SavedAccountsList.SelectedItem is not SavedAccountItem selected || selected.IsCurrent) return;
+        if (!selected.HasSession)
+        {
+            SwitchEmailBox.Text = selected.Email;
+            ShowInfo("这个账号只有本地记录，没有可恢复的加密登录状态。请使用邮箱验证码重新登录。\n\n邮箱已自动填入下方输入框。");
+            return;
+        }
+
+        TypelessSession? savedSession;
+        try
+        {
+            savedSession = await _vault.LoadAsync(selected.UserId);
+        }
+        catch (Exception exception)
+        {
+            ShowInfo($"无法读取保存的登录状态：{FriendlyMessage(exception)}\n\n请重新登录该账号。");
+            SwitchEmailBox.Text = selected.Email;
+            return;
+        }
+
+        if (savedSession is null)
+        {
+            SwitchEmailBox.Text = selected.Email;
+            ShowInfo("保存的登录状态不存在，请重新登录该账号。");
+            return;
+        }
+        if (IsJwtExpired(savedSession.RefreshToken))
+        {
+            SwitchEmailBox.Text = selected.Email;
+            ShowInfo("这个账号的长期登录状态已经过期，请使用邮箱验证码重新登录。\n\n邮箱已自动填入下方输入框。");
+            return;
+        }
+
+        await SwitchToSavedSessionAsync(savedSession);
+    }
+
+    private async Task SwitchToSavedSessionAsync(TypelessSession savedSession)
+    {
+        await RunOperationAsync("正在保存当前账号并准备切换…", async token =>
+        {
+            string? backup = null;
+            var switched = false;
+            var typelessWasRunning = false;
+            try
+            {
+                if (_session is not null)
+                    await SaveKnownSessionAsync(_session, token);
+                typelessWasRunning = await _localState.StopTypelessAsync(CancellationToken.None);
+                backup = await _localState.BackupAsync(token);
+                await _localState.ClearForStoredSessionSwitchAsync(token);
+                SetStatus("正在恢复所选账号的加密登录状态…", 60);
+                await _sessionStore.WriteAsync(savedSession, token);
+                _session = savedSession;
+                await SaveKnownSessionAsync(savedSession, token);
+                _localState.StartTypeless();
+                switched = true;
+                AccountEmailText.Text = savedSession.Email;
+                AccountStatusText.Text = $"用户 ID：{savedSession.UserId}";
+                await RefreshSavedAccountsAsync();
+                SetStatus($"已切换到 {savedSession.Email}；Typeless 将自动验证并刷新登录状态", 100);
+            }
+            finally
+            {
+                var backupCanBeDeleted = switched;
+                try
+                {
+                    if (!switched)
+                    {
+                        SetStatus("正在恢复原账号…", 80);
+                        if (backup is not null)
+                            await _localState.RestoreAsync(backup, CancellationToken.None);
+                        if (typelessWasRunning)
+                            _localState.StartTypeless();
+                        await RefreshSessionAsync();
+                        backupCanBeDeleted = true;
+                    }
+                }
+                finally
+                {
+                    if (backup is not null && backupCanBeDeleted && !_localState.TryDeleteBackup(backup))
+                        SetStatus("账号操作已完成，但临时备份未能自动清理，请稍后重试。", 100);
+                }
+            }
+        });
+    }
+
+    private async void RemoveSavedAccountButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SavedAccountsList.SelectedItem is not SavedAccountItem selected || selected.IsCurrent) return;
+        var answer = MessageBox.Show(
+            this,
+            $"确定移除 {selected.Email} 的本地记录和加密登录状态吗？\n\n这不会删除 Typeless 远程账号。",
+            "移除本地账号",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes) return;
+
+        await RunOperationAsync("正在移除本地账号记录…", async token =>
+        {
+            await _vault.DeleteAsync(selected.UserId, token);
+            await _accounts.DeleteAsync(selected.UserId, token);
+            await RefreshSavedAccountsAsync();
+            SetStatus("本地账号记录已移除", 100);
+        });
     }
 
     private async void DefaultExportButton_Click(object sender, RoutedEventArgs e) =>
@@ -247,7 +405,9 @@ public partial class MainWindow : Window
             var typelessWasRunning = false;
             try
             {
-                typelessWasRunning = await _localState.StopTypelessAsync(token);
+                if (_session is not null)
+                    await SaveKnownSessionAsync(_session, token);
+                typelessWasRunning = await _localState.StopTypelessAsync(CancellationToken.None);
                 backup = await _localState.BackupAsync(token);
                 await _localState.ClearForLoginAsync(token);
                 SetStatus("请在登录窗口中完成邮箱验证码验证", 30);
@@ -258,29 +418,36 @@ public partial class MainWindow : Window
 
                 SetStatus("正在写入新账号会话…", 75);
                 await _sessionStore.WriteAsync(login.Session, token);
-                switched = true;
-                try
-                {
-                    await _accounts.SaveAsync(new AccountRecord(login.Session.Email, login.Session.UserId, DateTimeOffset.UtcNow), token);
-                }
-                catch { }
+                await SaveKnownSessionAsync(login.Session, token);
                 _localState.StartTypeless();
+                switched = true;
                 _session = login.Session;
                 AccountEmailText.Text = login.Session.Email;
                 AccountStatusText.Text = $"用户 ID：{login.Session.UserId}";
                 SwitchEmailBox.Clear();
+                await RefreshSavedAccountsAsync();
                 SetStatus($"已切换到 {login.Session.Email}", 100);
             }
             finally
             {
-                if (!switched)
+                var backupCanBeDeleted = switched;
+                try
                 {
-                    SetStatus("正在恢复原账号…", 80);
-                    if (backup is not null)
-                        await _localState.RestoreAsync(backup, CancellationToken.None);
-                    if (typelessWasRunning)
-                        _localState.StartTypeless();
-                    await RefreshSessionAsync();
+                    if (!switched)
+                    {
+                        SetStatus("正在恢复原账号…", 80);
+                        if (backup is not null)
+                            await _localState.RestoreAsync(backup, CancellationToken.None);
+                        if (typelessWasRunning)
+                            _localState.StartTypeless();
+                        await RefreshSessionAsync();
+                        backupCanBeDeleted = true;
+                    }
+                }
+                finally
+                {
+                    if (backup is not null && backupCanBeDeleted && !_localState.TryDeleteBackup(backup))
+                        SetStatus("账号操作已完成，但临时备份未能自动清理，请稍后重试。", 100);
                 }
             }
         });
@@ -328,6 +495,7 @@ public partial class MainWindow : Window
         ImportModeBox.IsEnabled = !busy;
         ConcurrencyBox.IsEnabled = !busy && ImportModeBox.SelectedIndex == 1;
         CancelButton.IsEnabled = busy;
+        UpdateSavedAccountButtons();
     }
 
     private void SetStatus(string message, double percent)
@@ -343,6 +511,24 @@ public partial class MainWindow : Window
     {
         try { return new MailAddress(value).Address == value; }
         catch { return false; }
+    }
+
+    private static bool IsJwtExpired(string token)
+    {
+        try
+        {
+            var parts = token.Split('.');
+            if (parts.Length != 3) return false;
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            using var document = JsonDocument.Parse(Convert.FromBase64String(payload));
+            return document.RootElement.TryGetProperty("exp", out var expiration) &&
+                   DateTimeOffset.FromUnixTimeSeconds(expiration.GetInt64()) <= DateTimeOffset.UtcNow.AddMinutes(1);
+        }
+        catch (Exception exception) when (exception is FormatException or JsonException or ArgumentOutOfRangeException)
+        {
+            return false;
+        }
     }
 
     private static string FriendlyMessage(Exception exception) => exception switch
@@ -373,5 +559,16 @@ public partial class MainWindow : Window
         if (bytes >= 1024 * 1024) return $"{bytes / 1024d / 1024d:0.0} MB";
         if (bytes >= 1024) return $"{bytes / 1024d:0.0} KB";
         return $"{bytes} B";
+    }
+
+    private sealed record SavedAccountItem(
+        string Email,
+        string UserId,
+        bool HasSession,
+        bool IsCurrent,
+        DateTimeOffset LastUsedAt)
+    {
+        public string Details => $"{(HasSession ? "登录状态已加密保存" : "需要重新登录")} · 上次使用 {LastUsedAt:yyyy-MM-dd HH:mm}";
+        public string CurrentLabel => IsCurrent ? "当前账号" : string.Empty;
     }
 }

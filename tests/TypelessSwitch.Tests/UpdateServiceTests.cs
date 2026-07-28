@@ -98,6 +98,25 @@ public sealed class UpdateServiceTests
         }
     }
 
+    [Fact]
+    public async Task DownloadInstaller_RejectsUnsafeAssetName()
+    {
+        var update = new AppUpdateInfo(
+            new Version(0, 2, 0),
+            "v0.2.0",
+            "..\\outside.exe",
+            new Uri("https://github.com/StatXzy7/typeless-switch/releases/download/v0.2.0/installer.exe"),
+            0,
+            new string('0', 64),
+            new Uri("https://github.com/StatXzy7/typeless-switch/releases/tag/v0.2.0"));
+        var root = Path.Combine(Path.GetTempPath(), $"typeless-switch-update-{Guid.NewGuid():N}");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new UpdateService(new HttpClient(new UpdateHandler("{}", [])))
+                .DownloadInstallerAsync(update, root));
+        Assert.False(Directory.Exists(root));
+    }
+
     private sealed class UpdateHandler(string releaseJson, byte[] installer) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

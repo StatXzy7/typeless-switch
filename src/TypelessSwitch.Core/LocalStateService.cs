@@ -6,6 +6,8 @@ namespace TypelessSwitch.Core;
 
 public sealed class LocalStateService
 {
+    private const string BackupDirectoryPrefix = "typeless-switch-backup-";
+
     private static readonly string[] SessionEntries =
     [
         ".updaterId", "Cookies", "Cookies-journal", "Local Storage", "Session Storage",
@@ -48,16 +50,24 @@ public sealed class LocalStateService
     public Task<string> BackupAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var backupRoot = Path.Combine(Path.GetTempPath(), $"typeless-switch-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss-fff}");
+        var backupRoot = Path.Combine(Path.GetTempPath(), $"{BackupDirectoryPrefix}{DateTime.UtcNow:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}");
         Directory.CreateDirectory(backupRoot);
-        if (Directory.Exists(_paths.UserDataDirectory))
-            CopyDirectory(_paths.UserDataDirectory, Path.Combine(backupRoot, "user-data"));
-        if (File.Exists(_paths.DeviceCacheFile))
+        try
         {
-            var destination = Path.Combine(backupRoot, "device.cache");
-            File.Copy(_paths.DeviceCacheFile, destination, overwrite: true);
+            if (Directory.Exists(_paths.UserDataDirectory))
+                CopyDirectory(_paths.UserDataDirectory, Path.Combine(backupRoot, "user-data"));
+            if (File.Exists(_paths.DeviceCacheFile))
+            {
+                var destination = Path.Combine(backupRoot, "device.cache");
+                File.Copy(_paths.DeviceCacheFile, destination, overwrite: true);
+            }
+            return Task.FromResult(backupRoot);
         }
-        return Task.FromResult(backupRoot);
+        catch
+        {
+            TryDeleteBackup(backupRoot);
+            throw;
+        }
     }
 
     public async Task ClearForLoginAsync(CancellationToken cancellationToken = default)
@@ -67,18 +77,25 @@ public sealed class LocalStateService
         await ClearAppStorageAsync(cancellationToken);
         if (File.Exists(_paths.DeviceCacheFile)) File.Delete(_paths.DeviceCacheFile);
 
-        foreach (var entry in SessionEntries)
-        {
-            DeletePath(Path.Combine(_paths.UserDataDirectory, entry));
-            DeletePath(Path.Combine(_paths.UserDataDirectory, "Partitions", "no-proxy-session", entry));
-        }
+        ClearSessionEntries();
 
         if (_resetWindowsCredential) TryDeleteCredential();
+    }
+
+    public async Task ClearForStoredSessionSwitchAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (File.Exists(_paths.UserDataFile)) File.Delete(_paths.UserDataFile);
+        await ClearAppStorageAsync(cancellationToken);
+        ClearSessionEntries();
     }
 
     public Task RestoreAsync(string backupRoot, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (!IsOwnedBackupDirectory(backupRoot) || !Directory.Exists(backupRoot))
+            throw new InvalidDataException("切换前备份不存在或路径不安全，已停止恢复以保护当前数据。");
+
         var userDataBackup = Path.Combine(backupRoot, "user-data");
         if (Directory.Exists(_paths.UserDataDirectory)) Directory.Delete(_paths.UserDataDirectory, recursive: true);
         if (Directory.Exists(userDataBackup))
@@ -93,6 +110,20 @@ public sealed class LocalStateService
             File.Copy(deviceBackup, _paths.DeviceCacheFile, overwrite: true);
         }
         return Task.CompletedTask;
+    }
+
+    public bool TryDeleteBackup(string backupRoot)
+    {
+        if (!IsOwnedBackupDirectory(backupRoot)) return false;
+        try
+        {
+            if (Directory.Exists(backupRoot)) Directory.Delete(backupRoot, recursive: true);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     public void StartTypeless()
@@ -133,6 +164,15 @@ public sealed class LocalStateService
         catch { }
     }
 
+    private void ClearSessionEntries()
+    {
+        foreach (var entry in SessionEntries)
+        {
+            DeletePath(Path.Combine(_paths.UserDataDirectory, entry));
+            DeletePath(Path.Combine(_paths.UserDataDirectory, "Partitions", "no-proxy-session", entry));
+        }
+    }
+
     private static void DeletePath(string path)
     {
         if (File.Exists(path)) File.Delete(path);
@@ -146,5 +186,23 @@ public sealed class LocalStateService
             File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
         foreach (var directory in Directory.EnumerateDirectories(source))
             CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
+    }
+
+    private static bool IsOwnedBackupDirectory(string backupRoot)
+    {
+        if (string.IsNullOrWhiteSpace(backupRoot)) return false;
+        try
+        {
+            var fullPath = Path.GetFullPath(backupRoot)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var temporaryRoot = Path.GetFullPath(Path.GetTempPath())
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(Path.GetDirectoryName(fullPath), temporaryRoot, StringComparison.OrdinalIgnoreCase) &&
+                   Path.GetFileName(fullPath).StartsWith(BackupDirectoryPrefix, StringComparison.Ordinal);
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
+        {
+            return false;
+        }
     }
 }

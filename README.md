@@ -9,6 +9,8 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 ## 功能
 
 - 在 GUI 中读取当前 Typeless 账号。
+- 显示本机保存的账号，并支持一键切换和移除本地记录。
+- 使用 Windows DPAPI 为当前 Windows 用户加密保存每个账号的登录状态。
 - 使用邮箱验证码切换账号。
 - 切换前自动备份本地状态；取消或失败时自动恢复。
 - 一次导出完整词典为 JSON、TXT 和 CSV。
@@ -25,7 +27,7 @@ Typeless Switch 是一个面向 Windows 10/11 x64 的轻量桌面工具，用于
 从仓库的 [Releases](../../releases) 页面下载名称类似下面的安装程序：
 
 ```text
-TypelessSwitch-0.1.3-win-x64-setup.exe
+TypelessSwitch-0.2.0-win-x64-setup.exe
 ```
 
 运行安装程序后，从开始菜单打开 Typeless Switch。安装包自带 .NET 8 运行时；Windows 10 若没有 WebView2 Runtime，需要先通过 Microsoft Edge 更新安装它。Windows 11 通常已经包含 WebView2。
@@ -46,7 +48,19 @@ TypelessSwitch-0.1.3-win-x64-setup.exe
 4. 在登录窗口中继续邮箱登录并填写六位验证码。
 5. 登录成功后，程序写入新会话并重新打开 Typeless。
 
-关闭登录窗口或发生错误时，程序会恢复切换前的本地状态。备份保存在系统临时目录中，名称格式为 `%TEMP%\typeless-switch-backup-*`。
+关闭登录窗口或发生错误时，程序会恢复切换前的本地状态。操作期间的备份位于 `%TEMP%\typeless-switch-backup-*`，切换成功或回滚完成后会自动删除；仅当恢复本身失败时才会保留，以便排查和手动恢复。
+
+### 本地账号管理
+
+首次运行 v0.2.0 时，程序会将当前正在使用的 Typeless 会话保存到 Windows 当前用户专属的加密会话库。之后每次通过邮箱验证码登录的新账号也会自动加入列表。
+
+1. 在“本地账号管理”中选择已保存账号。
+2. 点击“切换到所选账号”。
+3. 程序停止 Typeless、备份当前状态、恢复所选账号并重新启动 Typeless。
+
+如果长期登录状态仍然有效，Typeless 会使用官方刷新流程续期 access token。如果 refresh token 已过期，程序会要求重新进行邮箱验证码登录。
+
+“移除本地记录”只删除本机的账号摘要和加密会话，不会注销或删除 Typeless 远程账号。当前正在使用的账号不能直接移除，需要先切换到其他账号。
 
 ### 更新程序
 
@@ -91,12 +105,13 @@ JSON 是重新导入时使用的标准文件。导出内容可能包含个人用
 | Typeless 本地状态 | `%APPDATA%\Typeless.exe\app-storage.json` |
 | Typeless 设备缓存 | `%APPDATA%\Typeless\Cache\device.cache` |
 | Typeless Switch 账号摘要 | `%LOCALAPPDATA%\TypelessSwitch\accounts.json` |
+| Windows 加密账号会话 | `%LOCALAPPDATA%\TypelessSwitch\AccountVault\*.session` |
 | 登录 WebView2 数据 | `%LOCALAPPDATA%\TypelessSwitch\WebView2` |
 | 默认词典导出 | Windows“文档”目录下的 `Typeless Switch\Exports` |
 | 更新安装包缓存 | `%LOCALAPPDATA%\TypelessSwitch\Updates` |
-| 切换前备份 | `%TEMP%\typeless-switch-backup-*` |
+| 切换前临时备份 | `%TEMP%\typeless-switch-backup-*`（操作完成后自动删除） |
 
-`accounts.json` 只记录邮箱、Typeless 用户 ID 和最后使用时间，不保存 access token 或 refresh token。令牌只从本地登录页读取，并按 Typeless 使用的加密格式写入其本地会话文件。
+`accounts.json` 只记录邮箱、Typeless 用户 ID 和最后使用时间，不保存 access token 或 refresh token。账号会话使用 Windows DPAPI CurrentUser 加密，只能由保存它的 Windows 用户解密；程序不提供令牌导出功能。
 
 如果 Typeless 安装在非默认目录，可以为当前用户设置 `TYPELESS_APP_PATH`，值为实际的 `Typeless.exe` 路径。不要把该值写入仓库文档或提交记录。
 
@@ -127,7 +142,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 
 ```text
 artifacts\publish\win-x64\
-installer\output\TypelessSwitch-0.1.3-win-x64-setup.exe
+installer\output\TypelessSwitch-0.2.0-win-x64-setup.exe
 ```
 
 只构建自包含应用、不构建安装程序：

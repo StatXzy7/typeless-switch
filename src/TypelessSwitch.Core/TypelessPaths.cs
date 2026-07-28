@@ -24,6 +24,7 @@ public sealed class TypelessPaths
     public string DeviceCacheFile => Path.Combine(RoamingAppData, "Typeless", "Cache", "device.cache");
     public string AppDataDirectory => Path.Combine(LocalAppData, "TypelessSwitch");
     public string AccountsFile => Path.Combine(AppDataDirectory, "accounts.json");
+    public string AccountVaultDirectory => Path.Combine(AppDataDirectory, "AccountVault");
     public string WebViewDirectory => Path.Combine(AppDataDirectory, "WebView2");
     public string UpdatesDirectory => Path.Combine(AppDataDirectory, "Updates");
     public string DefaultExportDirectory => Path.Combine(DocumentsDirectory, "Typeless Switch", "Exports");
