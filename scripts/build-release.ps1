@@ -57,8 +57,8 @@ try {
         $installerPath = Join-Path $repoRootFull "installer\output\TypelessSwitch-$installerVersion-win-x64-setup.exe"
         if (Test-Path -LiteralPath $installerPath) {
             $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
-            "$installerHash  $(Split-Path -Leaf $installerPath)" |
-                Set-Content -LiteralPath "$installerPath.sha256" -Encoding ascii -NoNewline
+            [IO.File]::WriteAllText("$installerPath.sha256",
+                "$installerHash  $(Split-Path -Leaf $installerPath)", [Text.UTF8Encoding]::new($false))
         }
     }
 }

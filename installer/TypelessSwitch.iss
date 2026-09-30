@@ -1,5 +1,5 @@
 #define MyAppName "Typeless Switch"
-#define MyAppVersion "0.3.2"
+#define MyAppVersion "0.4.0"
 #define MyAppPublisher "StatXzy7"
 #define MyAppExeName "TypelessSwitch.exe"
 

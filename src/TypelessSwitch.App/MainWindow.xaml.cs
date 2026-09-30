@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private readonly AccountRegistryService _accounts;
     private readonly AccountVaultService _vault;
     private readonly DictionaryService _dictionary;
+    private readonly DictionaryBackupService _dictionaryBackups = new();
     private readonly UpdateService _updates;
     private readonly SessionVerificationService _sessionVerifier;
     private readonly EnvironmentDiagnosticsService _diagnostics;
@@ -68,7 +69,7 @@ public partial class MainWindow : Window
             try { webViewVersion = CoreWebView2Environment.GetAvailableBrowserVersionString(); }
             catch (Exception exception) when (exception is WebView2RuntimeNotFoundException or InvalidOperationException) { }
 
-            var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.3.2";
+            var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.4.0";
             report = await _diagnostics.RunAsync(version, webViewVersion, token);
             SetStatus($"自检完成：通过 {report.Passed}，警告 {report.Warnings}，失败 {report.Failed}", 100);
         });
@@ -433,6 +434,53 @@ public partial class MainWindow : Window
     private async void DefaultExportButton_Click(object sender, RoutedEventArgs e) =>
         await ExportToDirectoryAsync(_paths.DefaultExportDirectory);
 
+    private async void DictionaryCheckButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunOperationAsync("正在检查词典连接…", async token =>
+        {
+            var words = await RunDictionaryOperationAsync(
+                "检查", (session, operationToken) => _dictionary.ListAsync(session.RefreshToken, operationToken), token);
+            SetStatus($"词典连接成功，当前返回 {words.Count} 个词条；尚未导出或导入文件", 100);
+        });
+    }
+
+    private async void ConvertBackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!File.Exists(ImportPathBox.Text))
+        {
+            ShowInfo("请先通过“选择文件”选中已有的 JSON 词典备份。离线转换无需登录，也不会读取云端词典。");
+            return;
+        }
+        var dialog = new SaveFileDialog
+        {
+            Title = "将备份转换为官方单列 CSV（仅词条文本）",
+            Filter = "CSV 文件 (*.csv)|*.csv",
+            FileName = "typeless-dictionary-official.csv",
+            DefaultExt = ".csv",
+            AddExtension = true,
+            OverwritePrompt = true
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        await RunOperationAsync("正在离线转换 JSON 备份…", async token =>
+        {
+            var result = await _dictionaryBackups.ConvertToOfficialCsvAsync(ImportPathBox.Text, dialog.FileName, token);
+            SetStatus($"已生成 {result.Total} 个词条的单列 CSV，去重 {result.Duplicates}，跳过空词条 {result.EmptyEntries}：{result.CsvPath}", 100);
+            ShowInfo("转换完成，原 JSON 未修改。此 CSV 仅含词条文本。\n\n" +
+                     "请在官方 Typeless 中登录目标账号，打开“词典 → 新建词条 → 导入 CSV”，选择刚保存的文件。\n\n" + result.CsvPath);
+        });
+    }
+
+    private void UsageGuideButton_Click(object sender, RoutedEventArgs e)
+    {
+        var guidePath = Path.Combine(AppContext.BaseDirectory, "使用说明.md");
+        if (!File.Exists(guidePath)) { ShowInfo("未找到使用说明，请从本版本 GitHub Release 下载“使用说明.md”。"); return; }
+        try { Process.Start(new ProcessStartInfo(guidePath) { UseShellExecute = true }); }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            ShowInfo($"无法用默认程序打开 Markdown 使用说明，请使用记事本打开：\n\n{guidePath}");
+        }
+    }
+
     private async void CustomExportButton_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFolderDialog { Title = "选择词典导出文件夹", Multiselect = false };
@@ -458,7 +506,7 @@ public partial class MainWindow : Window
     {
         if (!File.Exists(_paths.DefaultExportJsonFile))
         {
-            ShowInfo($"默认词典文件尚不存在。请先点击“导出到默认位置”。\n\n默认位置：{_paths.DefaultExportDirectory}");
+            ShowInfo($"未找到默认 JSON 备份。可通过“选择文件”选择已有备份；云端导出需要先确认词典连接可用。\n\n默认位置：{_paths.DefaultExportDirectory}");
             return;
         }
 
@@ -569,8 +617,9 @@ public partial class MainWindow : Window
         return latest;
     }
 
-    private static bool IsAuthenticationFailure(HttpRequestException exception) =>
-        exception.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
+    private static bool IsAuthenticationFailure(HttpRequestException exception) => exception is DictionaryApiException apiError
+        ? apiError.CanRetryAfterSessionSync
+        : exception.StatusCode == System.Net.HttpStatusCode.Unauthorized;
 
     private async void SwitchButton_Click(object sender, RoutedEventArgs e)
     {
@@ -719,6 +768,8 @@ public partial class MainWindow : Window
         CustomExportButton.IsEnabled = !busy;
         UseDefaultImportButton.IsEnabled = !busy;
         ImportButton.IsEnabled = !busy;
+        DictionaryCheckButton.IsEnabled = !busy;
+        ConvertBackupButton.IsEnabled = !busy;
         ImportModeBox.IsEnabled = !busy;
         ConcurrencyBox.IsEnabled = !busy && ImportModeBox.SelectedIndex == 1;
         StatusPanel.Visibility = Visibility.Visible;
@@ -748,11 +799,15 @@ public partial class MainWindow : Window
 
     private static string FriendlyMessage(Exception exception) => exception switch
     {
-        HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden } =>
-            "已重新同步 Typeless 会话，但长期登录凭据仍被拒绝或账号无权执行此操作。请在 Typeless 中重新登录后重试。",
+        DictionaryApiException => exception.Message,
+        HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized } =>
+            "重新读取会话后登录验证仍失败（HTTP 401）。请在 Typeless 中重新登录后重试。",
+        HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden } =>
+            "Typeless 服务拒绝此操作（HTTP 403）。请检查官方客户端是否可用；这不一定是登录过期。",
         HttpRequestException => "无法连接 Typeless 服务，请检查网络和登录状态。",
         UnauthorizedAccessException => "没有权限访问所选文件或 Typeless 本地数据。",
         JsonException => "文件格式不正确，或 Typeless 返回了无法识别的数据。",
+        System.Text.DecoderFallbackException => "词典备份不是有效的 UTF-8 文本，请使用原始 JSON 备份。",
         _ => exception.Message
     };
 

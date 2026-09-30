@@ -14,6 +14,8 @@ src\TypelessSwitch.Core\
   SessionStoreService.cs     Typeless 会话加解密
   LocalStateService.cs       停止、备份、清理、恢复和重启
   DictionaryService.cs       列表、导出和并发导入
+  DictionaryApiException.cs  脱敏服务端错误分类与重试判定
+  DictionaryBackupService.cs 离线 JSON 备份转官方单列 CSV
   UpdateService.cs            GitHub Release 检查、下载和 SHA-256 校验
   AccountRegistryService.cs  非敏感账号摘要
   AccountVaultService.cs     Windows DPAPI 加密账号会话
@@ -105,7 +107,9 @@ MAXAI_CLIENT__FEATURES__AUTH__TOKEN_INFO
 
 词典 API 的 Bearer 凭据与 Typeless 官方桌面端保持一致，使用长期 `refresh_token`，而不是数小时后会过期且可能继续残留在 `user-data.json` 中的短期 `access_token`。GUI 在每次导入或导出前重新读取磁盘会话，避免长期运行后继续使用内存缓存。
 
-如果第一次请求返回 HTTP 401/403，GUI 会重新读取一次会话并完整重试。导出是只读操作；导入重试会先重新列出目标账号中的词条，因此第一次尝试中已经成功的批次会被跳过。
+只有 HTTP 401 会触发 GUI 重新读取一次会话并完整重试。HTTP 403 会直接显示服务端拒绝；数值或字符串错误码 `20006` 单独识别为客户端不受支持，即使 HTTP 状态为 401 或 2xx 也不重试。服务端原始响应不进入用户提示，保留的诊断字段仅为 HTTP 状态和整数错误码。导入重试会先重新列出目标词典，因此已成功的批次会被跳过。
+
+v0.4.0 在 Typeless 2.8.1 环境确认了 `20006` 的服务端拒绝，但未恢复云端导出。官方客户端静态资源明确要求单列、每行一个词条的 CSV，限制文件大小为 5 MB。`DictionaryBackupService` 对已有 JSON 离线转换：后台执行，限制输入 32 MB，严格 UTF-8 解码并支持 UTF-8 BOM，输出 UTF-8 无 BOM，无表头，转义引号、去重、拒绝跨行词条和超限输出，先写同目录临时文件再原子替换输出。转换不会修改 JSON，不包含身份或语言、分类、替换规则等元数据。
 
 列表请求：
 
@@ -176,7 +180,9 @@ POST https://api.typeless.com/user/dictionary/add
 - 账号健康判断、旧账号元数据兼容和最近验证状态写入。
 - 切换后连续身份读取及不一致拒绝逻辑。
 - 诊断报告对邮箱、用户名、令牌和绝对路径的脱敏。
-- 词典导出使用长期凭据，以及 401/403 状态可供上层执行一次安全重试。
+- 词典导出使用长期凭据；仅 HTTP 401 可供上层重读会话并安全重试一次，HTTP 403 / `20006` 不重试。
+- 数值和字符串 `20006` 的错误分类、响应体脱敏，以及 API 拒绝后保留已有备份。
+- 离线单列 CSV 的中文与转义、去重、无 BOM、空条目、跨行拒绝、取消与 5 MB 限制。
 
 Release 构建入口：
 

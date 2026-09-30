@@ -149,7 +149,7 @@ public sealed class DictionaryService
     {
         var request = new HttpRequestMessage(method, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.3.2");
+        request.Headers.UserAgent.ParseAdd("Typeless-Switch/0.4.0");
         return request;
     }
 
@@ -171,18 +171,16 @@ public sealed class DictionaryService
     private static void EnsureSuccess(HttpResponseMessage response, string content, string action)
     {
         if (response.IsSuccessStatusCode) return;
-        throw new HttpRequestException(
-            $"{action}失败（HTTP {(int)response.StatusCode}）。{Sanitize(content)}", null, response.StatusCode);
+        throw DictionaryApiException.FromResponse(response.StatusCode, content, action);
     }
 
     private static void EnsureAuthenticated(HttpResponseMessage response, string content)
     {
-        if (response.StatusCode is not (System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)) return;
-        throw new HttpRequestException(
-            $"Typeless 长期登录凭据无效（HTTP {(int)response.StatusCode}）。", null, response.StatusCode);
+        if (response.StatusCode is not (System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) &&
+            DictionaryApiException.ReadApiCode(content) != 20006) return;
+        throw DictionaryApiException.FromResponse(response.StatusCode, content);
     }
 
-    private static string Sanitize(string value) => value.Length <= 200 ? value : value[..200];
     private static string Csv(object? value) => $"\"{Convert.ToString(value)?.Replace("\"", "\"\"")}\"";
     private static string WordKey(DictionaryWord word) => $"{word.Term}||{word.Language ?? string.Empty}";
 }

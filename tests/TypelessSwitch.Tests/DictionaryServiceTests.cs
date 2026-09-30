@@ -8,12 +8,54 @@ namespace TypelessSwitch.Tests;
 
 public sealed class DictionaryServiceTests
 {
+    [Theory]
+    [InlineData("20006", HttpStatusCode.Forbidden)]
+    [InlineData("\"20006\"", HttpStatusCode.Forbidden)]
+    [InlineData("20006", HttpStatusCode.OK)]
+    [InlineData("20006", HttpStatusCode.Unauthorized)]
+    public async Task List_UnsupportedClientDoesNotMisreportExpiredCredentials(string code, HttpStatusCode status)
+    {
+        var service = new DictionaryService(new HttpClient(new UnsupportedClientHandler(code, status)));
+
+        var exception = await Assert.ThrowsAnyAsync<HttpRequestException>(() => service.ListAsync("valid-refresh"));
+
+        Assert.Equal(status, exception.StatusCode);
+        Assert.Contains("20006", exception.Message);
+        Assert.Contains("客户端", exception.Message);
+        Assert.DoesNotContain("凭据无效", exception.Message);
+        Assert.DoesNotContain("private-detail", exception.Message);
+    }
+
+    [Fact]
+    public async Task Export_UnsupportedClientLeavesExistingBackupUntouched()
+    {
+        var service = new DictionaryService(new HttpClient(new UnsupportedClientHandler("20006")));
+        var session = new TypelessSession
+        {
+            Email = "source@example.com",
+            UserId = "source-user",
+            AccessToken = "access",
+            RefreshToken = "refresh"
+        };
+        var root = Path.Combine(Path.GetTempPath(), $"typeless-switch-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var backup = Path.Combine(root, "typeless-dictionary-export.json");
+        await File.WriteAllTextAsync(backup, "existing-backup", new UTF8Encoding(false));
+        try
+        {
+            await Assert.ThrowsAnyAsync<HttpRequestException>(() => service.ExportAsync(session, root));
+            Assert.Equal("existing-backup", await File.ReadAllTextAsync(backup));
+            Assert.Single(Directory.GetFiles(root));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public async Task List_UnauthorizedResponsePreservesStatusForSafeRetry()
     {
         var service = new DictionaryService(new HttpClient(new UnauthorizedHandler()));
 
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => service.ListAsync("expired"));
+        var exception = await Assert.ThrowsAnyAsync<HttpRequestException>(() => service.ListAsync("expired"));
 
         Assert.Equal(HttpStatusCode.Unauthorized, exception.StatusCode);
         Assert.DoesNotContain("private-detail", exception.Message, StringComparison.Ordinal);
@@ -209,6 +251,17 @@ public sealed class DictionaryServiceTests
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
             {
                 Content = new StringContent("{\"detail\":\"private-detail\"}", Encoding.UTF8, "application/json")
+            });
+    }
+
+    private sealed class UnsupportedClientHandler(string code, HttpStatusCode status = HttpStatusCode.Forbidden) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(status)
+            {
+                Content = new StringContent(
+                    "{\"code\":" + code + ",\"status\":\"FAIL\",\"detail\":\"private-detail\"}",
+                    Encoding.UTF8, "application/json")
             });
     }
 

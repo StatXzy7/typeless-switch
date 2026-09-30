@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      package_release:
+        description: Build installer and portable release candidate
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,3 +35,38 @@ jobs:
 
       - name: Test
         run: dotnet test .\TypelessSwitch.sln --configuration Release --no-build
+
+      - name: Set up installer compiler
+        if: github.event_name == 'workflow_dispatch' && inputs.package_release
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe')) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
+          }
+
+      - name: Package release candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.package_release
+        shell: pwsh
+        run: |
+          dotnet publish .\src\TypelessSwitch.App\TypelessSwitch.App.csproj --configuration Release --runtime win-x64 --self-contained true --property:PublishProfile=win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\TypelessSwitch.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+          [xml]$project = Get-Content .\src\TypelessSwitch.App\TypelessSwitch.App.csproj -Encoding UTF8
+          $releaseVersion = $project.Project.PropertyGroup.Version
+          $portablePath = ".\installer\output\TypelessSwitch-$releaseVersion-win-x64-portable.zip"
+          Compress-Archive -Path .\artifacts\publish\win-x64\* -DestinationPath $portablePath
+          Copy-Item -LiteralPath '.\docs\使用说明.md' -Destination '.\installer\output\使用说明.md'
+          Get-ChildItem .\installer\output -File | Where-Object { $_.Extension -in '.exe','.zip' } | ForEach-Object {
+            $assetHash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+            [IO.File]::WriteAllText($_.FullName + '.sha256', "$assetHash  $($_.Name)", [Text.UTF8Encoding]::new($false))
+          }
+
+      - name: Upload release candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.package_release
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-${{ github.sha }}
+          path: installer/output/*
+          if-no-files-found: error
