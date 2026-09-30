@@ -63,6 +63,47 @@ jobs:
             [IO.File]::WriteAllText($_.FullName + '.sha256', "$assetHash  $($_.Name)", [Text.UTF8Encoding]::new($false))
           }
 
+      - name: Verify installer startup and uninstall
+        if: github.event_name == 'workflow_dispatch' && inputs.package_release
+        shell: pwsh
+        run: |
+          $smokeRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $smokeDirectory = [IO.Path]::GetFullPath((Join-Path $smokeRoot 'typeless-switch-installer-smoke'))
+          if (-not $smokeDirectory.StartsWith($smokeRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Unsafe installer test directory.'
+          }
+          $installers = @(Get-ChildItem .\installer\output\*-setup.exe)
+          if ($installers.Count -ne 1) { throw 'Expected one installer candidate.' }
+          $installer = $installers[0]
+          $installArguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', ('/DIR="' + $smokeDirectory + '"'))
+          $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList $installArguments -WindowStyle Hidden -PassThru -Wait
+          if ($installProcess.ExitCode -ne 0) { throw 'Installer test failed.' }
+          $smokeProcess = $null
+          try {
+            $smokeExe = Join-Path $smokeDirectory 'TypelessSwitch.exe'
+            if (-not (Test-Path -LiteralPath (Join-Path $smokeDirectory '使用说明.md'))) { throw 'Installed guide missing.' }
+            $smokeProcess = Start-Process -FilePath $smokeExe -WindowStyle Normal -PassThru
+            $smokeProcess.WaitForInputIdle(15000) | Out-Null
+            Start-Sleep -Seconds 3
+            $smokeProcess.Refresh()
+            if ($smokeProcess.HasExited -or $smokeProcess.MainWindowHandle -eq 0 -or -not $smokeProcess.Responding) {
+              throw 'Installed app main window did not open.'
+            }
+            $smokeProcess.CloseMainWindow() | Out-Null
+            if (-not $smokeProcess.WaitForExit(10000)) { throw 'Installed app did not exit.' }
+          } finally {
+            if ($smokeProcess -and -not $smokeProcess.HasExited) {
+              $smokeProcess.Kill()
+              $smokeProcess.WaitForExit()
+            }
+            $uninstaller = Join-Path $smokeDirectory 'unins000.exe'
+            if (Test-Path -LiteralPath $uninstaller) {
+              $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -WindowStyle Hidden -PassThru -Wait
+              if ($uninstallProcess.ExitCode -ne 0) { throw 'Uninstall test failed.' }
+            }
+          }
+          if (Test-Path -LiteralPath (Join-Path $smokeDirectory 'TypelessSwitch.exe')) { throw 'Installed app remained after uninstall.' }
+
       - name: Upload release candidate
         if: github.event_name == 'workflow_dispatch' && inputs.package_release
         uses: actions/upload-artifact@v4
